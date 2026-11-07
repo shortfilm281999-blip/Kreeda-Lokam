@@ -1,0 +1,668 @@
+:root {
+  --kl-navy: #060b24;
+  --kl-gold: #f8d559;
+  --kl-panel: #0b1030;
+  --kl-white: #f6f4ff;
+  color-scheme: dark;
+}
+
+body {
+  background: #060b24 !important;
+}
+
+.kl-page {
+  min-height: 100vh;
+  background: #060b24;
+  color: var(--kl-white);
+  font-family: Arial, system-ui, sans-serif;
+}
+
+.kl-header {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px clamp(12px, 3vw, 30px);
+  background: #050a22;
+  border-bottom: 3px solid #ebcd56;
+  max-width: 1200px;
+  margin: auto;
+}
+
+.kl-brand {
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  width: min(52%, 500px);
+  text-align: left;
+  line-height: 0;
+}
+
+.kl-brand img {
+  width: 100%;
+  height: auto;
+  max-height: 115px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 2px 10px #ecc64b20);
+}
+
+.kl-auth-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.kl-button {
+  font-family: Arial, sans-serif;
+  border: 2px solid var(--kl-gold);
+  border-radius: 999px;
+  padding: 10px 26px;
+  font-weight: 800;
+  font-size: clamp(13px, 2.3vw, 22px);
+  cursor: pointer;
+  line-height: 1.15;
+  transition:
+    filter 0.15s,
+    transform 0.15s;
+}
+
+.kl-button:hover {
+  filter: brightness(1.09);
+}
+
+.kl-button:active {
+  transform: scale(0.98);
+}
+
+.kl-outline {
+  color: #fff;
+  background: transparent;
+}
+
+.kl-gold {
+  color: #080b1f;
+  background: linear-gradient(#ffe77d, #e8ba2f);
+}
+
+.kl-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.kl-menu-icon {
+  border: 0;
+  background: none;
+  color: #fff;
+  font-size: 34px;
+  cursor: pointer;
+  padding: 10px;
+}
+
+.kl-lobby {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 12px 36px;
+}
+
+.kl-bonuses {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.kl-bonus {
+  display: block;
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  position: relative;
+  background: #11132b;
+  cursor: pointer;
+  aspect-ratio: 0.94;
+  box-shadow: 0 4px 18px #0005;
+}
+
+.kl-artwork {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kl-games {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kl-tile {
+  background: #13162d;
+  border: 0;
+  border-radius: 17px;
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  aspect-ratio: 1;
+  position: relative;
+  box-shadow: 0 5px 12px #0006;
+  isolation: isolate;
+  transition:
+    transform 0.22s,
+    box-shadow 0.22s;
+}
+
+.kl-tile:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 22px #e8bc3a33;
+}
+
+.kl-tile svg {
+  transition: transform 1.5s ease;
+}
+
+.kl-tile:hover svg {
+  transform: scale(1.025);
+}
+
+.kl-tile:focus-visible,
+.kl-bonus:focus-visible,
+.kl-button:focus-visible,
+.kl-menu-icon:focus-visible,
+.kl-brand:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+}
+
+.kl-support {
+  width: 100%;
+  border: 3px solid var(--kl-gold);
+  border-radius: 999px;
+  background:
+    radial-gradient(
+      ellipse at bottom left,
+      #6a23ab88,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at bottom right,
+      #6734ac88,
+      transparent 50%
+    ),
+    #080d2b;
+  padding: 19px 10px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: clamp(14px, 3vw, 30px);
+  font-weight: 900;
+  margin-top: 30px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.kl-headset {
+  border-right: 2px solid #efcc58;
+  padding-right: 20px;
+  font-size: 1.6em;
+  line-height: 1;
+}
+
+.kl-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #020515d9;
+  backdrop-filter: blur(7px);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  overflow: auto;
+}
+
+.kl-dialog {
+  position: relative;
+  max-width: 480px;
+  width: 100%;
+  padding: 35px 24px;
+  background: linear-gradient(
+    145deg,
+    #171339,
+    #080d28
+  );
+  border: 2px solid #eac950;
+  border-radius: 24px;
+  box-shadow: 0 15px 90px #000a;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+.kl-dialog h2 {
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 20px;
+}
+
+.kl-dialog b {
+  color: #ffdb62;
+}
+
+.kl-dialog p {
+  color: #c9c9dc;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+
+.kl-close {
+  position: absolute;
+  right: 14px;
+  top: 5px;
+  border: 0;
+  background: none;
+  font-size: 32px;
+  color: white;
+  cursor: pointer;
+}
+
+.kl-account .kl-button {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  font-size: 16px;
+}
+
+.kl-login-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 4%;
+  border-bottom: 3px solid #f5cf54;
+  max-width: 950px;
+  margin: auto;
+}
+
+.kl-login-heading img {
+  width: 70%;
+  height: auto;
+  max-height: 145px;
+  object-fit: contain;
+}
+
+.kl-login-heading button {
+  background: none;
+  border: 0;
+  color: white;
+  font-size: 42px;
+  cursor: pointer;
+}
+
+.kl-login-main {
+  max-width: 700px;
+  padding: 38px 22px 50px;
+  margin: auto;
+}
+
+.kl-login-card {
+  border: 3px solid #f1d45d;
+  border-radius: 35px;
+  background:
+    radial-gradient(
+      ellipse at 50% 0,
+      #592b9d33,
+      transparent 45%
+    ),
+    #070c28;
+  padding: 0 28px 30px;
+  box-shadow: 0 5px 45px #6a34b614;
+}
+
+.kl-login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid #8581a866;
+  margin: 0 -10px 28px;
+}
+
+.kl-login-tabs button {
+  padding: 20px 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  font-weight: 800;
+  cursor: pointer;
+  position: relative;
+}
+
+.kl-login-tabs .active:after {
+  content: "";
+  height: 5px;
+  background: #f5d25d;
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -2px;
+  border-radius: 5px;
+}
+
+.kl-login-card h1 {
+  text-align: center;
+  font-size: 42px;
+  font-weight: 900;
+  margin: 20px 0 30px;
+  color: white;
+}
+
+.kl-login-card form > label {
+  display: block;
+  font-size: 19px;
+  font-weight: 800;
+  margin: 23px 0 12px;
+}
+
+.kl-login-card input:not([type="checkbox"]) {
+  width: 100%;
+  padding: 17px 16px;
+  font-size: 20px;
+  border: 2px solid #efd265;
+  border-radius: 15px;
+  color: white;
+  background: #080d27;
+  outline-offset: 4px;
+}
+
+.kl-password {
+  position: relative;
+}
+
+.kl-password input {
+  padding-right: 55px !important;
+}
+
+.kl-password button {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 28px;
+}
+
+.kl-login-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 25px 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.kl-login-options label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.kl-login-options input {
+  width: 22px;
+  height: 22px;
+  accent-color: #e6c955;
+}
+
+.kl-login-options button,
+.kl-new button {
+  color: #f2d05d;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.kl-submit {
+  width: 100%;
+  font-size: 28px;
+  padding: 16px;
+}
+
+.kl-new {
+  text-align: center;
+  font-size: 20px;
+  margin: 30px 0 10px;
+  color: #fff;
+}
+
+.kl-error {
+  padding: 12px;
+  border: 1px solid #a54b59;
+  background: #602d3b44;
+  border-radius: 10px;
+  color: #ffbdc9;
+}
+
+.kl-loading {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  align-items: center;
+  justify-content: center;
+  background: #060b24;
+  color: #f8d559;
+}
+
+.kl-loading img {
+  max-width: 500px;
+  width: 80%;
+}
+
+.kl-board-frame {
+  width: 100%;
+  min-height: 1100px;
+  border: 0;
+  display: block;
+  background: #080c21;
+}
+
+.kl-game-frame {
+  min-height: calc(100vh - 100px);
+  background: #080d26;
+  font-family: Arial, sans-serif;
+}
+
+.kl-game-frame > div {
+  background-color: #080d26;
+}
+
+.kl-game-frame h1 {
+  color: #f5d262;
+}
+
+.kl-game-frame button {
+  transition: filter 0.15s;
+}
+
+.kl-game-frame button:hover {
+  filter: brightness(1.08);
+}
+
+.kl-game-frame .text-cyan-300,
+.kl-game-frame .text-amber-300,
+.kl-game-frame .text-teal-300 {
+  color: #f0cf68;
+}
+
+.kl-game-frame .bg-cyan-400 {
+  background: #e7c64f;
+}
+
+.kl-game-frame .border-cyan-400\/30 {
+  border-color: #e7c64f55;
+}
+
+.kl-game-frame .bg-\[\#080d16\] {
+  background: #080d26;
+}
+
+.kl-game-frame .bg-\[\#0d192a\] {
+  background: #121a3b;
+}
+
+@media (min-width: 900px) {
+  .kl-bonuses {
+    gap: 16px;
+  }
+
+  .kl-bonus {
+    aspect-ratio: 1.22;
+  }
+
+  .kl-games {
+    gap: 14px;
+  }
+
+  .kl-tile {
+    aspect-ratio: 1.1;
+  }
+
+  .kl-lobby {
+    padding-top: 22px;
+  }
+
+  .kl-header {
+    min-height: 110px;
+  }
+
+  .kl-auth-actions {
+    gap: 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  .kl-header {
+    min-height: 82px;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .kl-brand {
+    width: 53%;
+  }
+
+  .kl-button {
+    padding: 8px 12px;
+    font-size: 13px;
+    border-width: 1.5px;
+  }
+
+  .kl-auth-actions {
+    gap: 7px;
+  }
+
+  .kl-lobby {
+    padding: 12px 8px 25px;
+  }
+
+  .kl-bonuses {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .kl-bonus {
+    border-radius: 12px;
+  }
+
+  .kl-games {
+    gap: 6px;
+  }
+
+  .kl-tile {
+    border-radius: 11px;
+    aspect-ratio: 0.93;
+  }
+
+  .kl-support {
+    margin-top: 22px;
+    border-width: 2px;
+    padding: 14px 6px;
+    gap: 12px;
+    font-size: 16px;
+  }
+
+  .kl-headset {
+    padding-right: 12px;
+  }
+
+  .kl-login-main {
+    padding: 22px 14px;
+  }
+
+  .kl-login-card {
+    padding: 0 18px 24px;
+    border-radius: 26px;
+    border-width: 2px;
+  }
+
+  .kl-login-tabs button {
+    font-size: 20px;
+    padding: 18px;
+  }
+
+  .kl-login-card h1 {
+    font-size: 34px;
+  }
+
+  .kl-login-card form > label {
+    font-size: 17px;
+  }
+
+  .kl-login-card input:not([type="checkbox"]) {
+    padding: 14px;
+    font-size: 18px;
+  }
+
+  .kl-login-heading {
+    padding: 12px 4%;
+    gap: 12px;
+  }
+
+  .kl-login-heading button {
+    font-size: 32px;
+  }
+
+  .kl-login-options {
+    font-size: 13px;
+  }
+
+  .kl-login-card .kl-submit {
+    font-size: 25px;
+    padding: 14px;
+  }
+
+  .kl-new {
+    font-size: 17px;
+  }
+
+  .kl-board-frame {
+    min-height: 1450px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kl-tile,
+  .kl-tile svg,
+  .kl-button {
+    transition: none;
+  }
+}
