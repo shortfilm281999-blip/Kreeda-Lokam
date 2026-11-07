@@ -12,7 +12,7 @@ import ChangePasswordPage from "./components/ChangePasswordPage";
 import GameControlPage from "./components/GameControlPage";
 
 import RoulettePage from "./components/RoulettePage";
-import TSBFlightPage from "./components/TSBFlightPage";
+import AviatorXXPage from "./components/AviatorXXPage";
 import CardGamesPage from "./components/CardGamesPage";
 import ColorPredictionPage from "./components/ColorPredictionPage";
 import AnimatedSuperOverPage from "./components/AnimatedSuperOverPage";
@@ -77,8 +77,13 @@ const CUSTOMER_GAMES = {
   },
 
   "/games/tsb-flight": {
-    title: "AVIATOR",
-    Page: TSBFlightPage,
+    title: "AVIATOR XX",
+    Page: AviatorXXPage,
+  },
+
+  "/games/aviator-xx": {
+    title: "AVIATOR XX",
+    Page: AviatorXXPage,
   },
 
   "/games/roulette": {
@@ -191,7 +196,6 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [login, setLogin] = useState(false);
-
   const [pendingPath, setPendingPath] = useState(null);
   const [menu, setMenu] = useState(false);
 
@@ -349,11 +353,9 @@ export default function App() {
         {
           method: "POST",
           credentials: "same-origin",
-
           headers: {
             "Content-Type": "application/json",
           },
-
           body: "{}",
         }
       );
@@ -402,6 +404,21 @@ export default function App() {
   }
 
   const home = () => location.assign("/");
+
+  function openAccountView(nextView) {
+    setMenu(false);
+
+    if (selected) {
+      sessionStorage.setItem(
+        "kl-menu-next",
+        nextView
+      );
+
+      home();
+    } else {
+      setView(nextView);
+    }
+  }
 
   if (path === "/admin") {
     return adminChecking ? (
@@ -516,6 +533,8 @@ export default function App() {
           user={user}
           onBack={home}
           onLogout={logout}
+          onDeposit={() => openAccountView("deposit")}
+          onWithdrawal={() => openAccountView("withdrawal")}
         />
       </div>
     );
