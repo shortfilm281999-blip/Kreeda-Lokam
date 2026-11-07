@@ -1077,7 +1077,7 @@ export default function DreamWheelControlPage({
               </p>
 
               <p className="dc-hint">
-                LOCK & OPEN ROUND saves the entire plan
+                LOCK &amp; OPEN ROUND saves the entire plan
                 immediately. It cannot be edited afterward.
                 Betting starts after a 5-second preparation
                 countdown, stays open for 30 seconds, then
