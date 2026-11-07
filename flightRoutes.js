@@ -1,27 +1,27 @@
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, randomInt, createHash } from 'node:crypto';
 
 import {
   requireControllerAccount,
   verifyControllerForMutation,
-} from "./controllerAccounts.js";
+} from './controllerAccounts.js';
 
 const LOCK = 746219;
 export const GROWTH_RATE = 0.085;
 
 const digest = value =>
-  createHash("sha256").update(String(value)).digest("hex");
+  createHash('sha256').update(String(value)).digest('hex');
 
 const demoEnabled = () =>
-  String(process.env.DEMO_GAMES_MODE ?? "demo")
+  String(process.env.DEMO_GAMES_MODE ?? 'demo')
     .trim()
-    .toLowerCase() === "demo";
+    .toLowerCase() === 'demo';
 
 const cookieValue = (req, name) =>
-  String(req.headers.cookie || "")
-    .split(";")
+  String(req.headers.cookie || '')
+    .split(';')
     .map(value => value.trim())
     .find(value => value.startsWith(`${name}=`))
-    ?.slice(name.length + 1) || "";
+    ?.slice(name.length + 1) || '';
 
 const wrap = fn => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -30,7 +30,7 @@ const fail = (status, message) =>
   Object.assign(new Error(message), { status });
 
 const positiveId = value =>
-  /^\d{1,18}$/.test(String(value || ""));
+  /^\d{1,18}$/.test(String(value || ''));
 
 const betView = bet =>
   bet
@@ -70,11 +70,11 @@ export function roundView(round, now) {
   const crash = new Date(round.crashes_at).getTime();
 
   const phase =
-    round.status === "CRASHED" || now >= crash
-      ? "CRASHED"
+    round.status === 'CRASHED' || now >= crash
+      ? 'CRASHED'
       : now < start
-        ? "COUNTDOWN"
-        : "RUNNING";
+        ? 'COUNTDOWN'
+        : 'RUNNING';
 
   return {
     id: String(round.id),
@@ -83,20 +83,21 @@ export function roundView(round, now) {
     serverTime: new Date(now).toISOString(),
     commitment: round.commitment,
     multiplier:
-      phase === "COUNTDOWN"
+      phase === 'COUNTDOWN'
         ? 1
-        : phase === "CRASHED"
+        : phase === 'CRASHED'
           ? round.crash_hundredths / 100
           : Math.min(
               flightMultiplier(start, now),
               round.crash_hundredths,
             ) / 100,
     crashMultiplier:
-      phase === "CRASHED"
+      phase === 'CRASHED'
         ? round.crash_hundredths / 100
         : null,
-    seed: phase === "CRASHED" ? round.seed : null,
-    mode: "ADMIN_CONTROLLED_DEMO",
+    seed: phase === 'CRASHED' ? round.seed : null,
+    mode: round.run_mode || 'ADMIN_CONTROLLED_DEMO',
+    planSlot: round.plan_slot || null,
   };
 }
 
@@ -104,9 +105,10 @@ export async function initializeFlight(pool) {
   const client = await pool.connect();
 
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
+
     await client.query(
-      "SELECT pg_advisory_xact_lock($1)",
+      'SELECT pg_advisory_xact_lock($1)',
       [LOCK],
     );
 
@@ -191,6 +193,24 @@ export async function initializeFlight(pool) {
         ON tsb_flight_bets(round_id,customer_id,bet_slot)
         WHERE status <> 'CANCELLED';
 
+      ALTER TABLE tsb_flight_rounds
+        ADD COLUMN IF NOT EXISTS run_mode
+        TEXT NOT NULL DEFAULT 'ADMIN_CONTROLLED_DEMO';
+
+      ALTER TABLE tsb_flight_rounds
+        ADD COLUMN IF NOT EXISTS plan_slot SMALLINT;
+
+      CREATE TABLE IF NOT EXISTS tsb_flight_settings (
+        id INTEGER PRIMARY KEY CHECK(id=1),
+        mode SMALLINT NOT NULL DEFAULT 0
+          CHECK(mode BETWEEN 0 AND 4),
+        plans JSONB NOT NULL,
+        cursors JSONB NOT NULL DEFAULT '[0,0,0,0]'::jsonb,
+        version INTEGER NOT NULL DEFAULT 1,
+        updated_by TEXT NOT NULL DEFAULT 'SYSTEM',
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
       CREATE OR REPLACE FUNCTION tsb_flight_protect_locked_round()
       RETURNS trigger AS $$
       BEGIN
@@ -206,6 +226,8 @@ export async function initializeFlight(pool) {
           OR NEW.starts_at IS DISTINCT FROM OLD.starts_at
           OR NEW.crashes_at IS DISTINCT FROM OLD.crashes_at
           OR NEW.controller_id IS DISTINCT FROM OLD.controller_id
+          OR NEW.run_mode IS DISTINCT FROM OLD.run_mode
+          OR NEW.plan_slot IS DISTINCT FROM OLD.plan_slot
           OR (
             OLD.status='CRASHED'
             AND NEW.status IS DISTINCT FROM OLD.status
@@ -227,9 +249,23 @@ export async function initializeFlight(pool) {
         EXECUTE FUNCTION tsb_flight_protect_locked_round();
     `);
 
-    await client.query("COMMIT");
+    await client.query(
+      `INSERT INTO tsb_flight_settings(id,plans)
+       VALUES(1,$1::jsonb)
+       ON CONFLICT(id) DO NOTHING`,
+      [
+        JSON.stringify(
+          Array.from(
+            { length: 4 },
+            () => Array(50).fill(200),
+          ),
+        ),
+      ],
+    );
+
+    await client.query('COMMIT');
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
@@ -238,7 +274,7 @@ export async function initializeFlight(pool) {
 
 async function serverNow(client) {
   const result = await client.query(
-    "SELECT clock_timestamp() AS now",
+    'SELECT clock_timestamp() AS now',
   );
 
   return new Date(result.rows[0].now).getTime();
@@ -246,7 +282,7 @@ async function serverNow(client) {
 
 async function expireRound(client) {
   await client.query(
-    "SELECT pg_advisory_xact_lock($1)",
+    'SELECT pg_advisory_xact_lock($1)',
     [LOCK],
   );
 
@@ -272,21 +308,207 @@ async function transaction(pool, fn) {
   const client = await pool.connect();
 
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
     await client.query(
-      "SELECT pg_advisory_xact_lock($1)",
+      'SELECT pg_advisory_xact_lock($1)',
       [LOCK],
     );
 
     const result = await fn(client);
-    await client.query("COMMIT");
+
+    await client.query('COMMIT');
+
     return result;
   } catch (error) {
-    await client.query("ROLLBACK");
+    await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
+  }
+}
+
+// Mode 0 = Random.
+// Modes 1–4 = four independently looping saved plans.
+
+const jsonValue = value =>
+  typeof value === 'string'
+    ? JSON.parse(value)
+    : value;
+
+const modeName = mode =>
+  mode === 0
+    ? 'RANDOM_DEMO'
+    : `ADMIN_CONTROL_${String(mode).padStart(2, '0')}`;
+
+function settingsView(row) {
+  return {
+    mode: Number(row.mode),
+    modeName: modeName(Number(row.mode)),
+    version: Number(row.version),
+
+    plans: jsonValue(row.plans).map(
+      plan => plan.map(value => value / 100),
+    ),
+
+    nextSlots: jsonValue(row.cursors).map(
+      value => Number(value) + 1,
+    ),
+
+    updatedAt: row.updated_at,
+  };
+}
+
+export function parseFlightPlans(plans) {
+  if (!Array.isArray(plans) || plans.length !== 4) {
+    throw fail(400, 'Exactly four plans are required.');
+  }
+
+  return plans.map((plan, index) => {
+    if (!Array.isArray(plan) || plan.length !== 50) {
+      throw fail(
+        400,
+        `Admin Control ${index + 1} requires exactly 50 values.`,
+      );
+    }
+
+    return plan.map(value => {
+      const text = String(value).trim();
+
+      if (
+        !/^\d{1,4}(\.\d{1,2})?$/.test(text) ||
+        Number(text) < 1 ||
+        Number(text) > 1000
+      ) {
+        throw fail(
+          400,
+          'Every multiplier must be 1.00–1000.00, with at most two decimals.',
+        );
+      }
+
+      return Math.round(Number(text) * 100);
+    });
+  });
+}
+
+export function randomFlightHundredths() {
+  // Original demo distribution:
+  // 3% instant crash; otherwise a capped inverse curve.
+  // Independent of customers, stakes and previous results.
+
+  if (randomInt(100) < 3) return 100;
+
+  const sample =
+    (randomInt(1000000000) + 1) / 1000000001;
+
+  return Math.min(
+    100000,
+    Math.max(100, Math.floor(100 / sample)),
+  );
+}
+
+async function advanceFlight(client) {
+  await expireRound(client);
+
+  const latest = (
+    await client.query(
+      `SELECT *
+       FROM tsb_flight_rounds
+       ORDER BY id DESC
+       LIMIT 1`,
+    )
+  ).rows[0];
+
+  if (latest?.status === 'LOCKED') return;
+
+  const now = await serverNow(client);
+
+  // Show the crashed result for four seconds.
+  if (
+    latest &&
+    now < new Date(latest.crashes_at).getTime() + 4000
+  ) {
+    return;
+  }
+
+  const settings = (
+    await client.query(
+      `SELECT *
+       FROM tsb_flight_settings
+       WHERE id=1
+       FOR UPDATE`,
+    )
+  ).rows[0];
+
+  if (!settings) {
+    throw fail(
+      503,
+      'Flight settings are not initialized.',
+    );
+  }
+
+  const mode = Number(settings.mode);
+  const cursors = jsonValue(settings.cursors).map(Number);
+  const plans = jsonValue(settings.plans);
+  const slot = mode ? cursors[mode - 1] : null;
+
+  const hundredths = mode
+    ? plans[mode - 1][slot]
+    : randomFlightHundredths();
+
+  const start = now + 10000;
+
+  const crash =
+    start +
+    Math.ceil(
+      Math.log(hundredths / 100) /
+        GROWTH_RATE * 1000,
+    );
+
+  const sequence = await client.query(
+    `SELECT nextval(
+       pg_get_serial_sequence('tsb_flight_rounds','id')
+     ) AS id`,
+  );
+
+  const id = String(sequence.rows[0].id);
+  const seed = randomBytes(32).toString('hex');
+
+  await client.query(
+    `INSERT INTO tsb_flight_rounds(
+       id,
+       crash_hundredths,
+       seed,
+       commitment,
+       controller_id,
+       starts_at,
+       crashes_at,
+       run_mode,
+       plan_slot
+     )
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      id,
+      hundredths,
+      seed,
+      flightCommitment(id, hundredths, seed),
+      settings.updated_by,
+      new Date(start),
+      new Date(crash),
+      modeName(mode),
+      mode ? slot + 1 : null,
+    ],
+  );
+
+  if (mode) {
+    cursors[mode - 1] = (slot + 1) % 50;
+
+    await client.query(
+      `UPDATE tsb_flight_settings
+       SET cursors=$1::jsonb
+       WHERE id=1`,
+      [JSON.stringify(cursors)],
+    );
   }
 }
 
@@ -296,16 +518,16 @@ export function registerFlightRoutes(app, pool) {
       ? next()
       : res.status(409).json({
           error:
-            "TSB Flight is a demo-only game. Enable DEMO_GAMES_MODE=demo.",
+            'Super Fast Aviator is a demo-only game. Enable DEMO_GAMES_MODE=demo.',
         });
 
   const customer = wrap(async (req, res, next) => {
-    const token = cookieValue(req, "tsb_demo_session");
+    const token = cookieValue(req, 'tsb_demo_session');
 
     if (!/^[a-f0-9]{64}$/.test(token)) {
       throw fail(
         401,
-        "Please logout and login with your customer ID to play.",
+        'Please logout and login with your customer ID to play.',
       );
     }
 
@@ -319,34 +541,38 @@ export function registerFlightRoutes(app, pool) {
 
     if (
       !result.rows[0] ||
-      result.rows[0].status !== "ACTIVE"
+      result.rows[0].status !== 'ACTIVE'
     ) {
       throw fail(
         401,
-        "Customer session expired. Please login again.",
+        'Customer session expired. Please login again.',
       );
     }
 
     req.flightCustomer = result.rows[0];
+
     next();
   });
 
-  const controller = requireControllerAccount(pool, true);
-  const controllerSession = requireControllerAccount(pool, false);
+  const controller =
+    requireControllerAccount(pool, true);
 
-  app.use("/api/flight", (req, res, next) => {
-    res.set("Cache-Control", "no-store");
+  const controllerSession =
+    requireControllerAccount(pool, false);
+
+  app.use('/api/flight', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
     next();
   });
 
-  app.use("/api/game-control", (req, res, next) => {
-    res.set("Cache-Control", "no-store");
+  app.use('/api/game-control', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
     next();
   });
 
   async function state(isController, customerId) {
     return transaction(pool, async client => {
-      await expireRound(client);
+      await advanceFlight(client);
 
       const latest = await client.query(
         `SELECT *
@@ -376,8 +602,16 @@ export function registerFlightRoutes(app, pool) {
       };
 
       if (isController) {
+        const settings = await client.query(
+          `SELECT *
+           FROM tsb_flight_settings
+           WHERE id=1`,
+        );
+
+        data.settings = settingsView(settings.rows[0]);
+
         data.lockedMultiplier =
-          latest.rows[0]?.status === "LOCKED"
+          latest.rows[0]?.status === 'LOCKED'
             ? latest.rows[0].crash_hundredths / 100
             : null;
       } else {
@@ -389,7 +623,7 @@ export function registerFlightRoutes(app, pool) {
         );
 
         if (!wallet.rows[0]) {
-          throw fail(401, "Customer account not found.");
+          throw fail(401, 'Customer account not found.');
         }
 
         const bets = await client.query(
@@ -402,9 +636,11 @@ export function registerFlightRoutes(app, pool) {
         );
 
         data.customerId = customerId;
+
         data.balance = Number(
           wallet.rows[0].demo_coin_balance,
         );
+
         data.bets = bets.rows.map(betView);
       }
 
@@ -413,7 +649,7 @@ export function registerFlightRoutes(app, pool) {
   }
 
   app.get(
-    "/api/game-control/state",
+    '/api/game-control/state',
     controllerSession,
     onlyDemo,
     wrap(async (req, res) => {
@@ -440,119 +676,117 @@ export function registerFlightRoutes(app, pool) {
   );
 
   app.get(
-    "/api/flight/state",
+    '/api/flight/state',
     customer,
     onlyDemo,
     wrap(async (req, res) => {
-      res.json(await state(false, req.flightCustomer.id));
+      res.json(
+        await state(false, req.flightCustomer.id),
+      );
     }),
   );
 
   app.post(
-    "/api/game-control/flight/rounds",
+    '/api/game-control/flight/settings',
     controller,
     onlyDemo,
     wrap(async (req, res) => {
-      const text = String(req.body?.multiplier || "");
+      const mode = req.body?.mode;
+      const expectedVersion = req.body?.version;
 
       if (
-        !/^\d{1,4}(\.\d{1,2})?$/.test(text) ||
-        Number(text) < 1 ||
-        Number(text) > 1000
+        !Number.isInteger(mode) ||
+        mode < 0 ||
+        mode > 4 ||
+        !Number.isSafeInteger(expectedVersion) ||
+        expectedVersion < 1
       ) {
         throw fail(
           400,
-          "Enter a multiplier from 1.00 to 1000.00 (up to two decimals).",
+          'A valid mode (0–4) and settings version are required.',
         );
       }
 
-      const hundredths = Math.round(Number(text) * 100);
+      const plans = parseFlightPlans(req.body?.plans);
 
-      const data = await transaction(pool, async client => {
-        await verifyControllerForMutation(
-          client,
-          req.controllerAccount,
-        );
-
-        await expireRound(client);
-
-        const active = await client.query(
-          `SELECT id
-           FROM tsb_flight_rounds
-           WHERE status='LOCKED'`,
-        );
-
-        if (active.rows.length) {
-          throw fail(
-            409,
-            "A locked countdown or running round already exists. It cannot be changed.",
-          );
-        }
-
-        const now = await serverNow(client);
-        const start = now + 10000;
-        const crash =
-          start +
-          Math.ceil(
-            Math.log(hundredths / 100) / GROWTH_RATE * 1000,
+      const data = await transaction(
+        pool,
+        async client => {
+          await verifyControllerForMutation(
+            client,
+            req.controllerAccount,
           );
 
-        const sequence = await client.query(
-          `SELECT nextval(
-            pg_get_serial_sequence('tsb_flight_rounds','id')
-          ) AS id`,
-        );
+          const current = (
+            await client.query(
+              `SELECT *
+               FROM tsb_flight_settings
+               WHERE id=1
+               FOR UPDATE`,
+            )
+          ).rows[0];
 
-        const id = String(sequence.rows[0].id);
-        const seed = randomBytes(32).toString("hex");
-        const commitment = flightCommitment(
-          id,
-          hundredths,
-          seed,
-        );
+          if (
+            !current ||
+            Number(current.version) !== expectedVersion
+          ) {
+            throw fail(
+              409,
+              'Settings changed. Refresh and review before saving again.',
+            );
+          }
 
-        const saved = await client.query(
-          `INSERT INTO tsb_flight_rounds(
-             id,
-             crash_hundredths,
-             seed,
-             commitment,
-             controller_id,
-             starts_at,
-             crashes_at
-           )
-           VALUES($1,$2,$3,$4,$5,$6,$7)
-           RETURNING *`,
-          [
-            id,
-            hundredths,
-            seed,
-            commitment,
-            req.controllerId,
-            new Date(start),
-            new Date(crash),
-          ],
-        );
+          const saved = (
+            await client.query(
+              `UPDATE tsb_flight_settings
+               SET mode=$1,
+                   plans=$2::jsonb,
+                   version=version+1,
+                   updated_by=$3,
+                   updated_at=NOW()
+               WHERE id=1
+               RETURNING *`,
+              [
+                mode,
+                JSON.stringify(plans),
+                req.controllerAccount.login_id,
+              ],
+            )
+          ).rows[0];
 
-        return {
-          success: true,
-          round: roundView(saved.rows[0], now),
-          lockedMultiplier: hundredths / 100,
-        };
-      });
+          return {
+            success: true,
+            settings: settingsView(saved),
+            message:
+              'Saved. Changes apply to the next round. Current round stays locked.',
+          };
+        },
+      );
 
-      res.status(201).json(data);
+      res.json(data);
     }),
   );
 
   app.post(
-    "/api/flight/bets",
+    '/api/game-control/flight/rounds',
+    controller,
+    onlyDemo,
+    (req, res) =>
+      res.status(409).json({
+        error:
+          'Rounds run automatically. Use the updated controller to save Random or Admin Control 01–04.',
+      }),
+  );
+
+  app.post(
+    '/api/flight/bets',
     customer,
     onlyDemo,
     wrap(async (req, res) => {
       const amount = Number(req.body?.stake);
-      const roundId = String(req.body?.roundId || "");
-      const requestKey = String(req.body?.requestKey || "");
+      const roundId = String(req.body?.roundId || '');
+      const requestKey = String(req.body?.requestKey || '');
+
       const slot =
         req.body?.slot === undefined
           ? 1
@@ -568,405 +802,444 @@ export function registerFlightRoutes(app, pool) {
       ) {
         throw fail(
           400,
-          "Valid round, request key and 10–25,000 whole demo coins and slot 1 or 2 are required.",
+          'Valid round, request key and 10–25,000 whole demo coins and slot 1 or 2 are required.',
         );
       }
 
-      const data = await transaction(pool, async client => {
-        await expireRound(client);
+      const data = await transaction(
+        pool,
+        async client => {
+          await expireRound(client);
 
-        const selected = await client.query(
-          `SELECT *
-           FROM tsb_flight_rounds
-           WHERE id=$1
-           FOR UPDATE`,
-          [roundId],
-        );
+          const selected = await client.query(
+            `SELECT *
+             FROM tsb_flight_rounds
+             WHERE id=$1
+             FOR UPDATE`,
+            [roundId],
+          );
 
-        const wallet = await client.query(
-          `SELECT status,demo_coin_balance
-           FROM customers
-           WHERE id=$1
-           FOR UPDATE`,
-          [req.flightCustomer.id],
-        );
+          const wallet = await client.query(
+            `SELECT status,demo_coin_balance
+             FROM customers
+             WHERE id=$1
+             FOR UPDATE`,
+            [req.flightCustomer.id],
+          );
 
-        if (wallet.rows[0]?.status !== "ACTIVE") {
-          throw fail(403, "Customer account is inactive.");
-        }
-
-        const old = await client.query(
-          `SELECT *
-           FROM tsb_flight_bets
-           WHERE customer_id=$1 AND request_key=$2`,
-          [req.flightCustomer.id, requestKey],
-        );
-
-        if (old.rows[0]) {
-          if (
-            String(old.rows[0].round_id) !== roundId ||
-            Number(old.rows[0].stake) !== amount ||
-            Number(old.rows[0].bet_slot) !== slot
-          ) {
+          if (wallet.rows[0]?.status !== 'ACTIVE') {
             throw fail(
-              409,
-              "Request key belongs to another bet.",
+              403,
+              'Customer account is inactive.',
             );
           }
 
+          const old = await client.query(
+            `SELECT *
+             FROM tsb_flight_bets
+             WHERE customer_id=$1 AND request_key=$2`,
+            [req.flightCustomer.id, requestKey],
+          );
+
+          if (old.rows[0]) {
+            if (
+              String(old.rows[0].round_id) !== roundId ||
+              Number(old.rows[0].stake) !== amount ||
+              Number(old.rows[0].bet_slot) !== slot
+            ) {
+              throw fail(
+                409,
+                'Request key belongs to another bet.',
+              );
+            }
+
+            return {
+              success: true,
+              replayed: true,
+              bet: betView(old.rows[0]),
+              balance: Number(
+                wallet.rows[0].demo_coin_balance,
+              ),
+            };
+          }
+
+          const round = selected.rows[0];
+
+          const existing = await client.query(
+            `SELECT id
+             FROM tsb_flight_bets
+             WHERE round_id=$1
+               AND customer_id=$2
+               AND bet_slot=$3
+               AND status <> 'CANCELLED'`,
+            [roundId, req.flightCustomer.id, slot],
+          );
+
+          if (existing.rows.length) {
+            throw fail(
+              409,
+              'This bet box already has a bet for this round.',
+            );
+          }
+
+          const balance =
+            Number(wallet.rows[0].demo_coin_balance) -
+            amount;
+
+          if (balance < 0) {
+            throw fail(
+              400,
+              'Insufficient demo coins.',
+            );
+          }
+
+          const now = await serverNow(client);
+
+          if (
+            !round ||
+            round.status !== 'LOCKED' ||
+            now >= new Date(round.starts_at).getTime()
+          ) {
+            throw fail(
+              409,
+              'Betting is closed for this round.',
+            );
+          }
+
+          const saved = await client.query(
+            `INSERT INTO tsb_flight_bets(
+               round_id,
+               customer_id,
+               request_key,
+               stake,
+               bet_slot
+             )
+             VALUES($1,$2,$3,$4,$5)
+             RETURNING *`,
+            [
+              roundId,
+              req.flightCustomer.id,
+              requestKey,
+              amount,
+              slot,
+            ],
+          );
+
+          await client.query(
+            `UPDATE customers
+             SET demo_coin_balance=$1,updated_at=NOW()
+             WHERE id=$2`,
+            [balance, req.flightCustomer.id],
+          );
+
+          await client.query(
+            `INSERT INTO demo_coin_transactions(
+               customer_id,amount,transaction_type,note
+             )
+             VALUES($1,$2,'FLIGHT_STAKE',$3)`,
+            [
+              req.flightCustomer.id,
+              -amount,
+              `Super Fast Aviator round #${roundId}, bet #${saved.rows[0].id}`,
+            ],
+          );
+
           return {
             success: true,
-            replayed: true,
-            bet: betView(old.rows[0]),
-            balance: Number(wallet.rows[0].demo_coin_balance),
+            bet: betView(saved.rows[0]),
+            balance,
           };
-        }
-
-        const round = selected.rows[0];
-
-        const existing = await client.query(
-          `SELECT id
-           FROM tsb_flight_bets
-           WHERE round_id=$1
-             AND customer_id=$2
-             AND bet_slot=$3
-             AND status <> 'CANCELLED'`,
-          [roundId, req.flightCustomer.id, slot],
-        );
-
-        if (existing.rows.length) {
-          throw fail(
-            409,
-            "This bet box already has a bet for this round.",
-          );
-        }
-
-        const balance =
-          Number(wallet.rows[0].demo_coin_balance) - amount;
-
-        if (balance < 0) {
-          throw fail(400, "Insufficient demo coins.");
-        }
-
-        const now = await serverNow(client);
-
-        if (
-          !round ||
-          round.status !== "LOCKED" ||
-          now >= new Date(round.starts_at).getTime()
-        ) {
-          throw fail(409, "Betting is closed for this round.");
-        }
-
-        const saved = await client.query(
-          `INSERT INTO tsb_flight_bets(
-             round_id,
-             customer_id,
-             request_key,
-             stake,
-             bet_slot
-           )
-           VALUES($1,$2,$3,$4,$5)
-           RETURNING *`,
-          [
-            roundId,
-            req.flightCustomer.id,
-            requestKey,
-            amount,
-            slot,
-          ],
-        );
-
-        await client.query(
-          `UPDATE customers
-           SET demo_coin_balance=$1,updated_at=NOW()
-           WHERE id=$2`,
-          [balance, req.flightCustomer.id],
-        );
-
-        await client.query(
-          `INSERT INTO demo_coin_transactions(
-             customer_id,amount,transaction_type,note
-           )
-           VALUES($1,$2,'FLIGHT_STAKE',$3)`,
-          [
-            req.flightCustomer.id,
-            -amount,
-            `TSB Flight round #${roundId}, bet #${saved.rows[0].id}`,
-          ],
-        );
-
-        return {
-          success: true,
-          bet: betView(saved.rows[0]),
-          balance,
-        };
-      });
+        },
+      );
 
       res.json(data);
     }),
   );
 
   app.post(
-    "/api/flight/bets/:id/cancel",
+    '/api/flight/bets/:id/cancel',
     customer,
     onlyDemo,
     wrap(async (req, res) => {
       if (!positiveId(req.params.id)) {
-        throw fail(400, "Invalid bet ID.");
+        throw fail(400, 'Invalid bet ID.');
       }
 
-      const data = await transaction(pool, async client => {
-        await expireRound(client);
+      const data = await transaction(
+        pool,
+        async client => {
+          await expireRound(client);
 
-        const result = await client.query(
-          `SELECT
-             b.*,
-             r.starts_at,
-             r.status AS round_status
-           FROM tsb_flight_bets b
-           JOIN tsb_flight_rounds r ON r.id=b.round_id
-           WHERE b.id=$1 AND b.customer_id=$2
-           FOR UPDATE OF b,r`,
-          [req.params.id, req.flightCustomer.id],
-        );
+          const result = await client.query(
+            `SELECT
+               b.*,
+               r.starts_at,
+               r.status AS round_status
+             FROM tsb_flight_bets b
+             JOIN tsb_flight_rounds r ON r.id=b.round_id
+             WHERE b.id=$1 AND b.customer_id=$2
+             FOR UPDATE OF b,r`,
+            [req.params.id, req.flightCustomer.id],
+          );
 
-        const bet = result.rows[0];
+          const bet = result.rows[0];
 
-        if (!bet) {
-          throw fail(404, "Bet not found.");
-        }
+          if (!bet) {
+            throw fail(404, 'Bet not found.');
+          }
 
-        const wallet = await client.query(
-          `SELECT status,demo_coin_balance
-           FROM customers
-           WHERE id=$1
-           FOR UPDATE`,
-          [req.flightCustomer.id],
-        );
+          const wallet = await client.query(
+            `SELECT status,demo_coin_balance
+             FROM customers
+             WHERE id=$1
+             FOR UPDATE`,
+            [req.flightCustomer.id],
+          );
 
-        if (wallet.rows[0]?.status !== "ACTIVE") {
-          throw fail(403, "Customer account is inactive.");
-        }
+          if (wallet.rows[0]?.status !== 'ACTIVE') {
+            throw fail(
+              403,
+              'Customer account is inactive.',
+            );
+          }
 
-        if (bet.status === "CANCELLED") {
+          if (bet.status === 'CANCELLED') {
+            return {
+              success: true,
+              replayed: true,
+              bet: betView(bet),
+              balance: Number(
+                wallet.rows[0].demo_coin_balance,
+              ),
+            };
+          }
+
+          if (bet.status !== 'PLACED') {
+            throw fail(
+              409,
+              'Only an active countdown bet can be cancelled.',
+            );
+          }
+
+          const balance =
+            Number(wallet.rows[0].demo_coin_balance) +
+            Number(bet.stake);
+
+          if (balance > 2147483647) {
+            throw fail(
+              409,
+              'Demo wallet balance limit reached.',
+            );
+          }
+
+          const now = await serverNow(client);
+
+          if (
+            bet.round_status !== 'LOCKED' ||
+            now >= new Date(bet.starts_at).getTime()
+          ) {
+            throw fail(
+              409,
+              'Flight has started. Cancellation is closed; use cash out while the flight is running.',
+            );
+          }
+
+          const saved = await client.query(
+            `UPDATE tsb_flight_bets
+             SET status='CANCELLED',
+                 payout=stake,
+                 cashout_hundredths=NULL,
+                 settled_at=NOW()
+             WHERE id=$1 AND status='PLACED'
+             RETURNING *`,
+            [bet.id],
+          );
+
+          if (!saved.rows[0]) {
+            throw fail(
+              409,
+              'Bet status changed. Refresh and try again.',
+            );
+          }
+
+          await client.query(
+            `UPDATE customers
+             SET demo_coin_balance=$1,updated_at=NOW()
+             WHERE id=$2`,
+            [balance, req.flightCustomer.id],
+          );
+
+          await client.query(
+            `INSERT INTO demo_coin_transactions(
+               customer_id,amount,transaction_type,note
+             )
+             VALUES($1,$2,'FLIGHT_REFUND',$3)`,
+            [
+              req.flightCustomer.id,
+              Number(bet.stake),
+              `Super Fast Aviator round #${bet.round_id}, bet #${bet.id}: cancelled before start; stake returned`,
+            ],
+          );
+
           return {
             success: true,
-            replayed: true,
-            bet: betView(bet),
-            balance: Number(wallet.rows[0].demo_coin_balance),
+            bet: betView(saved.rows[0]),
+            balance,
           };
-        }
-
-        if (bet.status !== "PLACED") {
-          throw fail(
-            409,
-            "Only an active countdown bet can be cancelled.",
-          );
-        }
-
-        const balance =
-          Number(wallet.rows[0].demo_coin_balance) +
-          Number(bet.stake);
-
-        if (balance > 2147483647) {
-          throw fail(409, "Demo wallet balance limit reached.");
-        }
-
-        const now = await serverNow(client);
-
-        if (
-          bet.round_status !== "LOCKED" ||
-          now >= new Date(bet.starts_at).getTime()
-        ) {
-          throw fail(
-            409,
-            "Flight has started. Cancellation is closed; use cash out while the flight is running.",
-          );
-        }
-
-        const saved = await client.query(
-          `UPDATE tsb_flight_bets
-           SET status='CANCELLED',
-               payout=stake,
-               cashout_hundredths=NULL,
-               settled_at=NOW()
-           WHERE id=$1 AND status='PLACED'
-           RETURNING *`,
-          [bet.id],
-        );
-
-        if (!saved.rows[0]) {
-          throw fail(
-            409,
-            "Bet status changed. Refresh and try again.",
-          );
-        }
-
-        await client.query(
-          `UPDATE customers
-           SET demo_coin_balance=$1,updated_at=NOW()
-           WHERE id=$2`,
-          [balance, req.flightCustomer.id],
-        );
-
-        await client.query(
-          `INSERT INTO demo_coin_transactions(
-             customer_id,amount,transaction_type,note
-           )
-           VALUES($1,$2,'FLIGHT_REFUND',$3)`,
-          [
-            req.flightCustomer.id,
-            Number(bet.stake),
-            `TSB Flight round #${bet.round_id}, bet #${bet.id}: cancelled before start; stake returned`,
-          ],
-        );
-
-        return {
-          success: true,
-          bet: betView(saved.rows[0]),
-          balance,
-        };
-      });
+        },
+      );
 
       res.json(data);
     }),
   );
 
   app.post(
-    "/api/flight/bets/:id/cashout",
+    '/api/flight/bets/:id/cashout',
     customer,
     onlyDemo,
     wrap(async (req, res) => {
       if (!positiveId(req.params.id)) {
-        throw fail(400, "Invalid bet ID.");
+        throw fail(400, 'Invalid bet ID.');
       }
 
-      const data = await transaction(pool, async client => {
-        await expireRound(client);
+      const data = await transaction(
+        pool,
+        async client => {
+          await expireRound(client);
 
-        const result = await client.query(
-          `SELECT
-             b.*,
-             r.starts_at,
-             r.crashes_at,
-             r.crash_hundredths,
-             r.status AS round_status
-           FROM tsb_flight_bets b
-           JOIN tsb_flight_rounds r ON r.id=b.round_id
-           WHERE b.id=$1 AND b.customer_id=$2
-           FOR UPDATE OF b,r`,
-          [req.params.id, req.flightCustomer.id],
-        );
+          const result = await client.query(
+            `SELECT
+               b.*,
+               r.starts_at,
+               r.crashes_at,
+               r.crash_hundredths,
+               r.status AS round_status
+             FROM tsb_flight_bets b
+             JOIN tsb_flight_rounds r ON r.id=b.round_id
+             WHERE b.id=$1 AND b.customer_id=$2
+             FOR UPDATE OF b,r`,
+            [req.params.id, req.flightCustomer.id],
+          );
 
-        const bet = result.rows[0];
+          const bet = result.rows[0];
 
-        if (!bet) {
-          throw fail(404, "Bet not found.");
-        }
+          if (!bet) {
+            throw fail(404, 'Bet not found.');
+          }
 
-        const wallet = await client.query(
-          `SELECT status,demo_coin_balance
-           FROM customers
-           WHERE id=$1
-           FOR UPDATE`,
-          [req.flightCustomer.id],
-        );
+          const wallet = await client.query(
+            `SELECT status,demo_coin_balance
+             FROM customers
+             WHERE id=$1
+             FOR UPDATE`,
+            [req.flightCustomer.id],
+          );
 
-        if (wallet.rows[0]?.status !== "ACTIVE") {
-          throw fail(403, "Customer account is inactive.");
-        }
+          if (wallet.rows[0]?.status !== 'ACTIVE') {
+            throw fail(
+              403,
+              'Customer account is inactive.',
+            );
+          }
 
-        if (bet.status === "CASHED_OUT") {
+          if (bet.status === 'CASHED_OUT') {
+            return {
+              success: true,
+              replayed: true,
+              bet: betView(bet),
+              balance: Number(
+                wallet.rows[0].demo_coin_balance,
+              ),
+            };
+          }
+
+          if (bet.status === 'CANCELLED') {
+            throw fail(
+              409,
+              'This bet was cancelled and its stake was returned.',
+            );
+          }
+
+          const now = await serverNow(client);
+
+          const start =
+            new Date(bet.starts_at).getTime();
+
+          if (
+            bet.status !== 'PLACED' ||
+            bet.round_status !== 'LOCKED' ||
+            now >= new Date(bet.crashes_at).getTime()
+          ) {
+            throw fail(
+              409,
+              'Round has crashed. Cash out is closed.',
+            );
+          }
+
+          if (now < start) {
+            throw fail(
+              409,
+              'Cash out opens after the flight starts.',
+            );
+          }
+
+          const hundredths = Math.min(
+            flightMultiplier(start, now),
+            bet.crash_hundredths - 1,
+          );
+
+          const payout = Math.floor(
+            Number(bet.stake) * hundredths / 100,
+          );
+
+          const balance =
+            Number(wallet.rows[0].demo_coin_balance) +
+            payout;
+
+          if (balance > 2147483647) {
+            throw fail(
+              409,
+              'Demo wallet balance limit reached.',
+            );
+          }
+
+          const saved = await client.query(
+            `UPDATE tsb_flight_bets
+             SET status='CASHED_OUT',
+                 payout=$1,
+                 cashout_hundredths=$2,
+                 settled_at=NOW()
+             WHERE id=$3
+             RETURNING *`,
+            [payout, hundredths, bet.id],
+          );
+
+          await client.query(
+            `UPDATE customers
+             SET demo_coin_balance=$1,updated_at=NOW()
+             WHERE id=$2`,
+            [balance, req.flightCustomer.id],
+          );
+
+          await client.query(
+            `INSERT INTO demo_coin_transactions(
+               customer_id,amount,transaction_type,note
+             )
+             VALUES($1,$2,'FLIGHT_PAYOUT',$3)`,
+            [
+              req.flightCustomer.id,
+              payout,
+              `Super Fast Aviator round #${bet.round_id}, bet #${bet.id}, ${hundredths / 100}x (stake included)`,
+            ],
+          );
+
           return {
             success: true,
-            replayed: true,
-            bet: betView(bet),
-            balance: Number(wallet.rows[0].demo_coin_balance),
+            bet: betView(saved.rows[0]),
+            balance,
           };
-        }
-
-        if (bet.status === "CANCELLED") {
-          throw fail(
-            409,
-            "This bet was cancelled and its stake was returned.",
-          );
-        }
-
-        const now = await serverNow(client);
-        const start = new Date(bet.starts_at).getTime();
-
-        if (
-          bet.status !== "PLACED" ||
-          bet.round_status !== "LOCKED" ||
-          now >= new Date(bet.crashes_at).getTime()
-        ) {
-          throw fail(
-            409,
-            "Round has crashed. Cash out is closed.",
-          );
-        }
-
-        if (now < start) {
-          throw fail(
-            409,
-            "Cash out opens after the flight starts.",
-          );
-        }
-
-        const hundredths = Math.min(
-          flightMultiplier(start, now),
-          bet.crash_hundredths - 1,
-        );
-
-        const payout = Math.floor(
-          Number(bet.stake) * hundredths / 100,
-        );
-
-        const balance =
-          Number(wallet.rows[0].demo_coin_balance) +
-          payout;
-
-        if (balance > 2147483647) {
-          throw fail(409, "Demo wallet balance limit reached.");
-        }
-
-        const saved = await client.query(
-          `UPDATE tsb_flight_bets
-           SET status='CASHED_OUT',
-               payout=$1,
-               cashout_hundredths=$2,
-               settled_at=NOW()
-           WHERE id=$3
-           RETURNING *`,
-          [payout, hundredths, bet.id],
-        );
-
-        await client.query(
-          `UPDATE customers
-           SET demo_coin_balance=$1,updated_at=NOW()
-           WHERE id=$2`,
-          [balance, req.flightCustomer.id],
-        );
-
-        await client.query(
-          `INSERT INTO demo_coin_transactions(
-             customer_id,amount,transaction_type,note
-           )
-           VALUES($1,$2,'FLIGHT_PAYOUT',$3)`,
-          [
-            req.flightCustomer.id,
-            payout,
-            `TSB Flight round #${bet.round_id}, bet #${bet.id}, ${hundredths / 100}x (stake included)`,
-          ],
-        );
-
-        return {
-          success: true,
-          bet: betView(saved.rows[0]),
-          balance,
-        };
-      });
+        },
+      );
 
       res.json(data);
     }),
@@ -976,13 +1249,16 @@ export function registerFlightRoutes(app, pool) {
 
   const timer = setInterval(async () => {
     if (updating) return;
+
     updating = true;
 
     try {
-      await transaction(pool, expireRound);
+      if (demoEnabled()) {
+        await transaction(pool, advanceFlight);
+      }
     } catch (error) {
       console.error(
-        "Flight round update failed:",
+        'Flight round update failed:',
         error.message,
       );
     } finally {
