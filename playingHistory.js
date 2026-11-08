@@ -50,7 +50,14 @@ const SOURCES = [
     CASE WHEN b.status IN ('CANCELLED','LOST','COLLECTED') THEN b.updated_at END AS settled_at,
     jsonb_build_object('completedLevel',b.completed_level) AS extra
     FROM tsb_deal_entries b JOIN tsb_deal_sessions r ON r.id=b.session_id`},
-  {table:'tsb_so_manual_bets',parent:'tsb_so_manual_matches',key:'id',sql:`SELECT ${sourceId} AS source_key,'SUPER_OVER'::TEXT AS game,b.customer_id,b.match_id::TEXT AS parent_id,
+  {table:'tsb_so_card_bets',parent:'tsb_so_card_rounds',key:'id',sql:`SELECT ${sourceId} AS source_key,'SUPER_OVER'::TEXT AS game,b.customer_id,b.match_id::TEXT AS parent_id,
+    'Card Super Over #'||b.match_id AS match_name,b.direction||' · Team '||(b.team+1) AS selection,
+    b.amount AS stake,b.hold AS held,b.points::TEXT||' points' AS rate,b.status,
+    CASE WHEN b.status='SETTLED' THEN ${netResult('b.hold','b.payout')} END::TEXT AS result,
+    CASE WHEN b.status='SETTLED' THEN b.payout END AS payout,b.created_at,NULL::TIMESTAMPTZ AS settled_at,
+    jsonb_build_object('kind','AUTO_CARD','team',b.team,'direction',b.direction,'window',b.window_id) AS extra
+    FROM tsb_so_card_bets b JOIN tsb_so_card_rounds r ON r.id=b.match_id`},
+  {table:'tsb_so_manual_bets',parent:'tsb_so_manual_matches',key:'id',optional:true,sql:`SELECT ${sourceId} AS source_key,'SUPER_OVER'::TEXT AS game,b.customer_id,b.match_id::TEXT AS parent_id,
     (r.teams->>0)||' vs '||(r.teams->>1)||' · M'||r.id AS match_name,b.direction||' · '||(r.teams->>b.team) AS selection,
     b.amount AS stake,b.hold AS held,b.points::TEXT||' points' AS rate,b.status,
     CASE WHEN b.status='SETTLED' THEN ${netResult('b.hold','b.payout')} END::TEXT AS result,
