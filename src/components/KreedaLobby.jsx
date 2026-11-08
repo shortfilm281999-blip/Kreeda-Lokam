@@ -144,8 +144,9 @@ const STYLES = `
 
 .kl-scrolling-games {
   display: grid;
-  gap: 8px;
+  gap: 0;
   width: 100%;
+  isolation: isolate;
 }
 
 .kl-game-lane {
@@ -153,10 +154,14 @@ const STYLES = `
   overflow: hidden;
   width: 100%;
   aspect-ratio: 4 / 1.05;
-  border-radius: 12px;
+  border-radius: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  box-shadow: none;
   isolation: isolate;
   touch-action: pan-y;
-  background: #080d25;
+  background: transparent;
 }
 
 .kl-game-lane:focus-within {
@@ -185,6 +190,9 @@ const STYLES = `
   aspect-ratio: 4 / 1.05;
   flex: none;
   box-sizing: border-box;
+  padding: 0 0 8px;
+  margin: 0;
+  background: transparent;
 }
 
 .kl-lane-group .kl-tile {
@@ -579,7 +587,6 @@ function ScrollingGameRow({ rowIndex, onGame }) {
 
 export default function KreedaLobby(props) {
   const { user, onGame, onSupport } = props;
-
   const [bonus, setBonus] = useState(null);
 
   const labels = [
