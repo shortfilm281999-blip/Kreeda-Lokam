@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+
 import KreedaLobby, {
   KreedaHeader,
   KreedaLogin,
@@ -10,7 +11,7 @@ import NewAdminPortal from "./components/NewAdminPortal";
 import ChangePasswordPage from "./components/ChangePasswordPage";
 import GameControlPage from "./components/GameControlPage";
 import RoulettePage from "./components/RoulettePage";
-import TSBFlightPage from "./components/TSBFlightPage";
+import AviatorXXPage from "./components/AviatorXXPage";
 import CardGamesPage from "./components/CardGamesPage";
 import ColorPredictionPage from "./components/ColorPredictionPage";
 import AnimatedSuperOverPage from "./components/AnimatedSuperOverPage";
@@ -27,10 +28,17 @@ import DepositPage from "./components/DepositPage";
 import WithdrawalPage from "./components/WithdrawalPage";
 import BetHistoryPage from "./components/BetHistoryPage";
 import AccountStatementPage from "./components/AccountStatementPage";
+
 import "./kreeda.css";
 
 const AUTH_KEY = "telugu_sports_auth_user";
-const ACCOUNT_VIEWS = ["deposit", "withdrawal", "history", "statement"];
+
+const ACCOUNT_VIEWS = [
+  "deposit",
+  "withdrawal",
+  "history",
+  "statement",
+];
 
 function BoardPage({ game }) {
   return (
@@ -60,7 +68,10 @@ const CUSTOMER_GAMES = {
     game: "ww",
   },
   "/games/tsb-flight": {
-    Page: TSBFlightPage,
+    Page: AviatorXXPage,
+  },
+  "/games/aviator": {
+    Page: AviatorXXPage,
   },
   "/games/roulette": {
     Page: RoulettePage,
@@ -136,20 +147,32 @@ export default function App() {
   const [view, setView] = useState(() => {
     const next = sessionStorage.getItem("kl-menu-next");
     sessionStorage.removeItem("kl-menu-next");
-    return ACCOUNT_VIEWS.includes(next) ? next : "home";
+
+    return ACCOUNT_VIEWS.includes(next)
+      ? next
+      : "home";
   });
 
-  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  const path =
+    window.location.pathname.replace(/\/+$/, "") || "/";
+
   const selected = CUSTOMER_GAMES[path];
-  const customerId = user?.id;
+
+  const customerId =
+    user?.id ??
+    user?.customerId ??
+    user?.customer_id;
 
   useEffect(() => {
     let active = true;
+
     const controller = new AbortController();
     const adminRoute = path === "/admin";
 
     fetch(
-      adminRoute ? "/api/auth/admin-session" : "/api/kl/session",
+      adminRoute
+        ? "/api/auth/admin-session"
+        : "/api/kl/session",
       {
         credentials: "same-origin",
         cache: "no-store",
@@ -158,18 +181,27 @@ export default function App() {
     )
       .then(async (response) => {
         const data = await response.json();
+
         if (!active) return;
 
         if (adminRoute) {
           setAdmin(
-            response.ok && !data.admin?.historyOnly ? data.admin : null,
+            response.ok && !data.admin?.historyOnly
+              ? data.admin
+              : null,
           );
         } else {
-          const customer = response.ok ? data.customer : null;
+          const customer = response.ok
+            ? data.customer
+            : null;
+
           setUser(customer);
 
           if (customer) {
-            sessionStorage.setItem(AUTH_KEY, JSON.stringify(customer));
+            sessionStorage.setItem(
+              AUTH_KEY,
+              JSON.stringify(customer),
+            );
           }
         }
       })
@@ -188,7 +220,10 @@ export default function App() {
       .then((response) => response.json())
       .then((data) => {
         if (active) {
-          setNumber(String(data.whatsappNumber || "").replace(/\D/g, ""));
+          setNumber(
+            String(data.whatsappNumber || "")
+              .replace(/\D/g, ""),
+          );
         }
       })
       .catch(() => {});
@@ -209,10 +244,15 @@ export default function App() {
 
     let active = true;
     let busy = false;
+
     const controller = new AbortController();
 
     async function refreshBalance() {
-      if (!active || busy || document.visibilityState === "hidden") {
+      if (
+        !active ||
+        busy ||
+        document.visibilityState === "hidden"
+      ) {
         return;
       }
 
@@ -232,8 +272,7 @@ export default function App() {
 
         if (
           !response.ok ||
-          data.balance === null ||
-          data.balance === undefined ||
+          data.balance == null ||
           !Number.isFinite(Number(data.balance))
         ) {
           throw new Error("Balance unavailable.");
@@ -251,32 +290,62 @@ export default function App() {
     }
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") refreshBalance();
+      if (document.visibilityState === "visible") {
+        refreshBalance();
+      }
     };
 
     refreshBalance();
 
-    const timer = window.setInterval(refreshBalance, 15000);
+    const timer = window.setInterval(
+      refreshBalance,
+      15000,
+    );
+
     window.addEventListener("focus", refreshBalance);
-    window.addEventListener("demo-balance-updated", refreshBalance);
-    window.addEventListener("demo-bets-updated", refreshBalance);
-    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener(
+      "demo-balance-updated",
+      refreshBalance,
+    );
+    window.addEventListener(
+      "demo-bets-updated",
+      refreshBalance,
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      onVisible,
+    );
 
     return () => {
       active = false;
       controller.abort();
       window.clearInterval(timer);
-      window.removeEventListener("focus", refreshBalance);
-      window.removeEventListener("demo-balance-updated", refreshBalance);
-      window.removeEventListener("demo-bets-updated", refreshBalance);
-      document.removeEventListener("visibilitychange", onVisible);
+
+      window.removeEventListener(
+        "focus",
+        refreshBalance,
+      );
+      window.removeEventListener(
+        "demo-balance-updated",
+        refreshBalance,
+      );
+      window.removeEventListener(
+        "demo-bets-updated",
+        refreshBalance,
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        onVisible,
+      );
     };
   }, [customerId, view, balanceRefresh]);
 
   function support() {
     if (!/^[1-9][0-9]{9,14}$/.test(number)) {
       setNotice(
-        "Support number is unavailable. Please try again after it is configured in Admin Payment Settings.",
+        "Support number is unavailable. Please check Admin Payment Settings.",
       );
       return;
     }
@@ -298,10 +367,17 @@ export default function App() {
     };
 
     setUser(next);
-    sessionStorage.setItem(AUTH_KEY, JSON.stringify(next));
+
+    sessionStorage.setItem(
+      AUTH_KEY,
+      JSON.stringify(next),
+    );
 
     if (remember) {
-      localStorage.setItem(AUTH_KEY, JSON.stringify(next));
+      localStorage.setItem(
+        AUTH_KEY,
+        JSON.stringify(next),
+      );
     } else {
       localStorage.removeItem(AUTH_KEY);
     }
@@ -322,11 +398,15 @@ export default function App() {
       const response = await fetch("/api/kl/logout", {
         method: "POST",
         credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: "{}",
       });
 
-      if (!response.ok) throw new Error("Logout failed.");
+      if (!response.ok) {
+        throw new Error("Logout failed.");
+      }
 
       localStorage.removeItem(AUTH_KEY);
       sessionStorage.removeItem(AUTH_KEY);
@@ -339,10 +419,14 @@ export default function App() {
       setPendingPath(null);
       setLogin(false);
 
-      if (path !== "/") window.location.assign("/");
+      if (path !== "/") {
+        window.location.assign("/");
+      }
     } catch {
       setMenu(false);
-      setNotice("Logout could not be confirmed. Please reconnect and retry.");
+      setNotice(
+        "Logout could not be confirmed. Please reconnect and retry.",
+      );
     }
   }
 
@@ -352,8 +436,15 @@ export default function App() {
       credentials: "same-origin",
     }).catch(() => {});
 
-    localStorage.removeItem("telugu_sports_demo_admin");
+    localStorage.removeItem(
+      "telugu_sports_demo_admin",
+    );
+
     setAdmin(null);
+  }
+
+  function home() {
+    window.location.assign("/");
   }
 
   function openGame(href) {
@@ -365,12 +456,13 @@ export default function App() {
     }
   }
 
-  function home() {
-    window.location.assign("/");
-  }
-
   function openView(next) {
-    if (next !== "home" && !ACCOUNT_VIEWS.includes(next)) return;
+    if (
+      next !== "home" &&
+      !ACCOUNT_VIEWS.includes(next)
+    ) {
+      return;
+    }
 
     setMenu(false);
 
@@ -385,7 +477,11 @@ export default function App() {
     } else {
       setView(next);
       setBalanceRefresh((value) => value + 1);
-      window.scrollTo({ top: 0, behavior: "auto" });
+
+      window.scrollTo({
+        top: 0,
+        behavior: "auto",
+      });
     }
   }
 
@@ -404,43 +500,74 @@ export default function App() {
     onHome: home,
     onDeposit: () => openView("deposit"),
     onWithdrawal: () => openView("withdrawal"),
-    onRefreshBalance: () => setBalanceRefresh((value) => value + 1),
+    onRefreshBalance: () =>
+      setBalanceRefresh((value) => value + 1),
   };
 
   if (path === "/admin") {
     if (adminChecking) {
-      return <div className="kl-loading">Checking Admin session…</div>;
+      return (
+        <div className="kl-loading">
+          Checking Admin session…
+        </div>
+      );
     }
 
     return admin?.isAuthenticated ? (
-      <AdminManagementShell admin={admin} onLogout={adminLogout} />
+      <AdminManagementShell
+        admin={admin}
+        onLogout={adminLogout}
+      />
     ) : (
-      <AdminLoginPage onLogin={setAdmin} onBack={home} />
+      <AdminLoginPage
+        onLogin={setAdmin}
+        onBack={home}
+      />
     );
   }
 
-  if (path === "/new-admin") return <NewAdminPortal />;
-  if (path === "/game-control") return <GameControlPage />;
-  if (path === "/game-control/roulette") return <RoulettePage controller />;
+  if (path === "/new-admin") {
+    return <NewAdminPortal />;
+  }
+
+  if (path === "/game-control") {
+    return <GameControlPage />;
+  }
+
+  if (path === "/game-control/roulette") {
+    return <RoulettePage controller />;
+  }
 
   if (path === "/game-control/deal-or-no-deal") {
     return <DealOrNoDealControlPage />;
   }
 
   if (path === "/game-control/dream-wheel") {
-    return <DreamWheelControlPage onBack={home} />;
+    return (
+      <DreamWheelControlPage onBack={home} />
+    );
   }
 
   if (checking) {
     return (
       <div className="kl-loading">
-        <img src="/kreeda/kreeda-lokam-logo.png" alt="Kreeda Lokam" />
+        <img
+          src="/kreeda/kreeda-lokam-logo.png"
+          alt="Kreeda Lokam"
+        />
+
         <span>Loading your arena…</span>
       </div>
     );
   }
 
-  if (user && (user.mustChangePassword || user.mustChangeWithdrawalPassword)) {
+  if (
+    user &&
+    (
+      user.mustChangePassword ||
+      user.mustChangeWithdrawalPassword
+    )
+  ) {
     return (
       <div className="kl-game-frame">
         <ChangePasswordPage
@@ -453,7 +580,9 @@ export default function App() {
               mustChangeWithdrawalPassword: false,
             });
 
-            if (pendingPath) window.location.assign(pendingPath);
+            if (pendingPath) {
+              window.location.assign(pendingPath);
+            }
           }}
           onLogout={logout}
         />
@@ -469,6 +598,7 @@ export default function App() {
         onClose={() => {
           setLogin(false);
           setPendingPath(null);
+
           if (path !== "/") home();
         }}
         onSignup={support}
@@ -489,10 +619,17 @@ export default function App() {
           user={user}
           onBack={home}
           onLogout={logout}
+          onDeposit={() => openView("deposit")}
+          onWithdrawal={() =>
+            openView("withdrawal")
+          }
         />
       </div>
     );
-  } else if (user && ACCOUNT_VIEWS.includes(view)) {
+  } else if (
+    user &&
+    ACCOUNT_VIEWS.includes(view)
+  ) {
     const Page = {
       deposit: DepositPage,
       withdrawal: WithdrawalPage,
@@ -544,7 +681,11 @@ export default function App() {
               ×
             </button>
 
-            <h2>{user?.name || user?.loginId || "My Account"}</h2>
+            <h2>
+              {user?.name ||
+                user?.loginId ||
+                "My Account"}
+            </h2>
 
             <button
               type="button"
@@ -559,7 +700,7 @@ export default function App() {
               className="kl-button kl-outline"
               onClick={() =>
                 showInformation(
-                  "Each game has its own rules and limits. Read the rules shown inside that game before placing a selection. For account assistance, contact Customer Support.",
+                  "Each game has its own rules and limits. Read the rules shown inside that game before placing a selection. Contact Customer Support for account assistance.",
                 )
               }
             >
@@ -625,6 +766,7 @@ export default function App() {
             aria-label="Notice"
           >
             <p>{notice}</p>
+
             <button
               type="button"
               className="kl-button kl-gold"
