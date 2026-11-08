@@ -1,0 +1,721 @@
+import React, {
+  useEffect,
+  useState,
+} from 'react';
+
+const TEAL = '#0bb3b8';
+const WINE = '#791b3e';
+
+const ist = value =>
+  new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value));
+
+async function getJSON(url) {
+  const response = await fetch(url, {
+    cache: 'no-store',
+    credentials: 'same-origin',
+  });
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(
+      'Server response was not JSON.',
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        'Unable to load matches.',
+    );
+  }
+
+  return data;
+}
+
+function parseStart(value) {
+  if (typeof value === 'number') {
+    return value < 100000000000
+      ? value * 1000
+      : value;
+  }
+
+  if (
+    typeof value === 'string' &&
+    /^\d{10,13}$/.test(value)
+  ) {
+    return parseStart(Number(value));
+  }
+
+  return Date.parse(value || '');
+}
+
+export function normalizeApiMatch(
+  item,
+  feed = '',
+) {
+  if (
+    !item ||
+    typeof item !== 'object'
+  ) {
+    return null;
+  }
+
+  const home =
+    item.home_team ||
+    item.homeTeam?.name ||
+    item.homeTeam ||
+    item.team1?.name ||
+    item.team1;
+
+  const away =
+    item.away_team ||
+    item.awayTeam?.name ||
+    item.awayTeam ||
+    item.team2?.name ||
+    item.team2;
+
+  const names = Array.isArray(item.teams)
+    ? item.teams
+        .map(team =>
+          typeof team === 'string'
+            ? team
+            : team?.name,
+        )
+        .filter(Boolean)
+    : [];
+
+  const teams =
+    typeof home === 'string' &&
+    typeof away === 'string'
+      ? `${home} vs ${away}`
+      : typeof item.teams === 'string'
+        ? item.teams
+        : names.length === 2
+          ? names.join(' vs ')
+          : item.title ||
+            item.name ||
+            item.eventName ||
+            item.event_name ||
+            '';
+
+  const start = parseStart(
+    item.commence_time ||
+      item.startTime ||
+      item.startAt ||
+      item.start_time ||
+      item.startDate ||
+      item.start_date ||
+      item.scheduledAt ||
+      item.date,
+  );
+
+  const status = String(
+    item.status || '',
+  ).toUpperCase();
+
+  if (
+    typeof teams !== 'string' ||
+    !teams.trim() ||
+    [
+      'COMPLETED',
+      'FINISHED',
+      'CANCELLED',
+      'CANCELED',
+      'ABANDONED',
+      'ENDED',
+    ].includes(status)
+  ) {
+    return null;
+  }
+
+  const source = String(
+    item.dataFeedType ||
+      item.feedType ||
+      item.source ||
+      item.provider ||
+      feed,
+  );
+
+  const id =
+    item.eventId ??
+    item.id ??
+    item.event_id ??
+    `${teams}:${
+      Number.isFinite(start)
+        ? start
+        : 'pending'
+    }`;
+
+  return {
+    ...item,
+    id,
+    key: `api-${id}`,
+    type: 'API',
+    sport: item.sport || 'cricket',
+
+    start: Number.isFinite(start)
+      ? start
+      : null,
+
+    teams,
+
+    date: Number.isFinite(start)
+      ? `${ist(start)} IST`
+      : 'Time unavailable',
+
+    demo:
+      /mock|demo|sample/i.test(source) ||
+      item.isMock === true ||
+      item.isDemo === true,
+
+    live:
+      item.live === true ||
+      item.isLive === true ||
+      [
+        'LIVE',
+        'INPLAY',
+        'IN_PLAY',
+        'IN PROGRESS',
+        'IN_PROGRESS',
+      ].includes(status),
+  };
+}
+
+function eventRows(data) {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  return (
+    [
+      data?.data,
+      data?.events,
+      data?.matches,
+      data?.data?.events,
+      data?.data?.matches,
+    ].find(Array.isArray) || []
+  );
+}
+
+/*
+ * Display only supplied decimal prices.
+ * Missing prices remain empty.
+ * Back prices are never copied into Lay.
+ */
+function priceText(value) {
+  if (
+    typeof value !== 'number' &&
+    typeof value !== 'string'
+  ) {
+    return '';
+  }
+
+  if (
+    typeof value === 'string' &&
+    !value.trim()
+  ) {
+    return '';
+  }
+
+  const number = Number(value);
+
+  return Number.isFinite(number) &&
+    number > 1
+    ? String(number)
+    : '';
+}
+
+function selectionPrices(selection) {
+  if (
+    selection &&
+    typeof selection === 'object' &&
+    !Array.isArray(selection)
+  ) {
+    return {
+      back: priceText(selection.back),
+      lay: priceText(selection.lay),
+    };
+  }
+
+  return {
+    back: priceText(selection),
+    lay: '',
+  };
+}
+
+function MatchOdds({ match, stopped }) {
+  const odds =
+    match.odds &&
+    typeof match.odds === 'object' &&
+    !Array.isArray(match.odds)
+      ? match.odds
+      : {};
+
+  const hidePrices =
+    stopped ||
+    match.suspended === true ||
+    [
+      'SUSPENDED',
+      'CLOSED',
+      'PAUSED',
+    ].includes(
+      String(
+        match.marketStatus ||
+          match.market_status ||
+          '',
+      ).toUpperCase(),
+    );
+
+  const columns = [
+    {
+      label: '1',
+      name: 'Team 1',
+      ...selectionPrices(odds.home),
+    },
+    {
+      label: 'X',
+      name: 'Draw',
+      ...selectionPrices(odds.draw),
+    },
+    {
+      label: '2',
+      name: 'Team 2',
+      ...selectionPrices(odds.away),
+    },
+  ];
+
+  return (
+    <div
+      className="border-t border-slate-200 px-4 pb-4 pt-3"
+      aria-label="Match odds preview"
+    >
+      <div className="grid grid-cols-3 gap-2">
+        {columns.map(column => (
+          <div
+            key={column.label}
+            className="min-w-0"
+          >
+            <div className="mb-1.5 text-center text-[11px] font-black text-slate-700">
+              {column.label}
+            </div>
+
+            <div className="grid grid-cols-2 gap-1">
+              {[
+                {
+                  side: 'Back',
+                  color: TEAL,
+                  price: column.back,
+                },
+                {
+                  side: 'Lay',
+                  color: WINE,
+                  price: column.lay,
+                },
+              ].map(cell => {
+                const value = hidePrices
+                  ? ''
+                  : cell.price;
+
+                return (
+                  <span
+                    key={cell.side}
+                    aria-label={`${column.name} ${cell.side}: ${
+                      value || 'unavailable'
+                    }`}
+                    className="flex h-9 min-w-0 items-center justify-center rounded-md px-1 text-[12px] font-black leading-none text-white"
+                    style={{
+                      backgroundColor:
+                        cell.color,
+                    }}
+                  >
+                    {value || '\u00A0'}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function CricketMatchList({
+  onOpenMatch,
+}) {
+  const [real, setReal] = useState([]);
+
+  const [
+    sportsError,
+    setSportsError,
+  ] = useState('');
+
+  const [loaded, setLoaded] =
+    useState(false);
+
+  const [feedDemo, setFeedDemo] =
+    useState(false);
+
+  const [meta, setMeta] =
+    useState(null);
+
+  const [receivedAt, setReceivedAt] =
+    useState(0);
+
+  const [clock, setClock] =
+    useState(Date.now());
+
+  useEffect(() => {
+    let alive = true;
+    let loading = false;
+    let sequence = 0;
+    let stream;
+
+    const apply = data => {
+      if (!alive) return;
+
+      sequence += 1;
+
+      const feed = String(
+        data.source ||
+          data.provider ||
+          '',
+      );
+
+      const matches = eventRows(data)
+        .filter(
+          item =>
+            item &&
+            typeof item === 'object' &&
+            (
+              !item.sport ||
+              String(
+                item.sport,
+              ).toLowerCase() === 'cricket'
+            ),
+        )
+        .map(item =>
+          normalizeApiMatch(item, feed),
+        )
+        .filter(Boolean);
+
+      const unique = new Map(
+        matches.map(match => [
+          match.key,
+          match,
+        ]),
+      );
+
+      setReal([...unique.values()]);
+
+      setFeedDemo(
+        /mock|demo|sample/i.test(feed),
+      );
+
+      setMeta(
+        data.sports?.cricket || data,
+      );
+
+      setReceivedAt(Date.now());
+      setSportsError('');
+      setLoaded(true);
+    };
+
+    const load = async () => {
+      if (loading || !alive) {
+        return;
+      }
+
+      loading = true;
+
+      const current = sequence;
+
+      try {
+        const data = await getJSON(
+          '/api/sports/events?sport=cricket',
+        );
+
+        if (current === sequence) {
+          apply(data);
+        }
+      } catch (failure) {
+        if (
+          alive &&
+          current === sequence
+        ) {
+          setSportsError(
+            failure.message,
+          );
+
+          setReceivedAt(0);
+          setLoaded(true);
+        }
+      } finally {
+        loading = false;
+      }
+    };
+
+    void load();
+
+    if (
+      typeof EventSource !== 'undefined'
+    ) {
+      stream = new EventSource(
+        '/api/sports/stream',
+      );
+
+      stream.onmessage = message => {
+        try {
+          const data = JSON.parse(
+            message.data,
+          );
+
+          if (
+            Array.isArray(data.events)
+          ) {
+            apply(data);
+          }
+        } catch {
+          // Cached GET retries.
+        }
+      };
+
+      stream.onerror = () => {
+        void load();
+      };
+    }
+
+    const timer = setInterval(
+      load,
+      5000,
+    );
+
+    const focus = () => {
+      void load();
+    };
+
+    window.addEventListener(
+      'focus',
+      focus,
+    );
+
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      stream?.close();
+
+      window.removeEventListener(
+        'focus',
+        focus,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setClock(Date.now());
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+
+  const fresh =
+    receivedAt > 0 &&
+    clock - receivedAt < 15000 &&
+    !sportsError;
+
+  const paused =
+    meta?.enabled !== true ||
+    meta?.stale ||
+    !fresh;
+
+  const fixtures = [...real].sort(
+    (a, b) =>
+      Number(Boolean(b.live)) -
+        Number(Boolean(a.live)) ||
+      (a.start ?? Infinity) -
+        (b.start ?? Infinity) ||
+      a.key.localeCompare(b.key),
+  );
+
+  return (
+    <div aria-label="Cricket match list">
+      {meta && (
+        <p
+          role="status"
+          className="my-3 text-xs leading-5 text-slate-600"
+        >
+          {meta.enabled === false
+            ? 'Cricket API OFF · Saved matches visible · Betting Paused.'
+            : paused
+              ? 'Waiting for fresh cricket data · Betting Paused.'
+              : 'Cricket updates ON · Every 5 seconds.'}
+
+          {meta.lastUpdated &&
+          Number.isFinite(
+            Date.parse(meta.lastUpdated),
+          )
+            ? ` Last update: ${ist(
+                meta.lastUpdated,
+              )} IST.`
+            : ' No fresh cricket update saved yet.'}
+        </p>
+      )}
+
+      {sportsError && (
+        <p
+          role="alert"
+          className="my-3 text-xs text-amber-800"
+        >
+          Sports feed: {sportsError}.
+          {' '}Showing saved matches.
+        </p>
+      )}
+
+      {fixtures.length === 0 && (
+        <div
+          role="status"
+          className="my-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"
+        >
+          {!loaded
+            ? 'Loading sports matches…'
+            : sportsError
+              ? 'Sports matches could not be loaded. Retrying automatically.'
+              : feedDemo
+                ? 'The demo feed currently has no cricket fixtures.'
+                : 'The sports server returned no cricket fixtures.'}
+        </div>
+      )}
+
+      {fixtures.map(match => {
+        const live = match.live;
+
+        const stopped = Boolean(
+          paused ||
+            match.paused ||
+            match.stale,
+        );
+
+        const open = () => {
+          onOpenMatch?.({
+            ...match,
+
+            bettingAllowed:
+              !stopped &&
+              match.bettingAllowed === true,
+          });
+        };
+
+        return (
+          <article
+            key={match.key}
+            role="button"
+            tabIndex={0}
+            aria-label={`Open ${match.teams}`}
+            onClick={open}
+            onKeyDown={event => {
+              if (
+                event.target ===
+                  event.currentTarget &&
+                !event.repeat &&
+                (
+                  event.key === 'Enter' ||
+                  event.key === ' '
+                )
+              ) {
+                event.preventDefault();
+                open();
+              }
+            }}
+            className="mb-3 cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 shadow-xl transition hover:border-[#0bb3b8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0bb3b8] focus-visible:ring-offset-2"
+          >
+            <div className="flex items-start justify-between gap-3 px-4 py-4">
+              <div className="min-w-0 flex-1">
+                <div
+                  className={`mb-2 text-[9px] font-black uppercase tracking-wider ${
+                    stopped
+                      ? 'text-slate-500'
+                      : live
+                        ? 'text-red-600'
+                        : 'text-teal-700'
+                  }`}
+                >
+                  <span
+                    className={
+                      live && !stopped
+                        ? 'animate-pulse'
+                        : ''
+                    }
+                  >
+                    ●
+                  </span>{' '}
+
+                  {stopped
+                    ? 'FEED PAUSED · SAVED MATCH'
+                    : match.demo
+                      ? 'DEMO FEED'
+                      : live
+                        ? 'LIVE'
+                        : 'UPCOMING'}
+                </div>
+
+                <h3 className="block w-full text-left text-[13px] font-black leading-5 text-slate-900">
+                  {match.teams}
+                </h3>
+
+                <p className="mt-2 text-[11px] font-bold text-teal-700">
+                  {match.start == null
+                    ? 'Time unavailable'
+                    : `${ist(match.start)} IST`}
+                </p>
+
+                {match.score && (
+                  <p className="mt-2 text-xs text-slate-600">
+                    {match.score}
+                  </p>
+                )}
+
+                {(
+                  stopped ||
+                  !match.bettingAllowed
+                ) && (
+                  <p className="mt-2 text-[10px] font-bold text-amber-800">
+                    {stopped
+                      ? 'New bets paused'
+                      : match.bettingReason ||
+                        'Betting Paused'}
+                  </p>
+                )}
+              </div>
+
+              <span
+                aria-hidden="true"
+                className="shrink-0 rounded-lg border border-[#791b3e] bg-[#791b3e] px-3 py-2 text-[10px] font-black text-white"
+              >
+                OPEN ›
+              </span>
+            </div>
+
+            <MatchOdds
+              match={match}
+              stopped={stopped}
+            />
+          </article>
+        );
+      })}
+    </div>
+  );
+}
