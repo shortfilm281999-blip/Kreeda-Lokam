@@ -144,72 +144,72 @@ const STYLES = `
 
 .kl-scrolling-games {
   display: grid;
-  gap: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: 8px;
   width: 100%;
   isolation: isolate;
 }
 
-.kl-game-lane {
+.kl-game-column {
   position: relative;
   overflow: hidden;
+  overflow: clip;
   width: 100%;
-  aspect-ratio: 4 / 1.05;
-  border-radius: 0;
+  min-width: 0;
+  aspect-ratio: 1 / 5.8;
   border: 0;
   margin: 0;
   padding: 0;
   box-shadow: none;
-  isolation: isolate;
   touch-action: pan-y;
   background: transparent;
 }
 
-.kl-game-lane:focus-within {
-  outline: 1px solid #efd474;
-  outline-offset: 2px;
-}
-
-.kl-game-lane:has(:focus-visible) .kl-lane-track {
-  animation: none;
-  transform: none;
-}
-
-.kl-lane-track {
+.kl-column-track {
   display: flex;
   flex-direction: column;
+  gap: 0;
   width: 100%;
   will-change: transform;
-  animation: kl-games-down 40s linear infinite;
+  animation: kl-column-down
+    var(--kl-column-duration, 36s)
+    linear infinite;
+  animation-delay: var(--kl-column-delay, 0s);
 }
 
-.kl-lane-group {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.kl-column-group {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  width: 100%;
-  aspect-ratio: 4 / 1.05;
   flex: none;
-  box-sizing: border-box;
+  width: 100%;
   padding: 0 0 8px;
   margin: 0;
-  background: transparent;
+  box-sizing: border-box;
 }
 
-.kl-lane-group .kl-tile {
+.kl-column-group .kl-column-card {
+  position: relative;
   display: block !important;
+  flex: none;
   width: 100%;
-  height: 100%;
+  height: auto !important;
   min-width: 0;
-  aspect-ratio: auto !important;
-  overflow: hidden;
+  min-height: 0;
+  aspect-ratio: 1 / 1.08 !important;
+  overflow: hidden !important;
   padding: 0 !important;
+  margin: 0 !important;
   border-radius: 12px;
+  line-height: 0;
 }
 
-.kl-lane-group .kl-artwork {
+.kl-column-card .kl-artwork {
   display: block;
   width: 100%;
   height: 100%;
+  overflow: hidden !important;
 }
 
 .kl-pause-badge {
@@ -235,12 +235,12 @@ const STYLES = `
 }
 
 .kl-fixed-header button:focus-visible,
-.kl-game-lane button:focus-visible {
+.kl-game-column button:focus-visible {
   outline: 2px solid #ffffff;
   outline-offset: -3px;
 }
 
-@keyframes kl-games-down {
+@keyframes kl-column-down {
   from {
     transform: translateY(-50%);
   }
@@ -251,7 +251,7 @@ const STYLES = `
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .kl-lane-track {
+  .kl-column-track {
     animation: none;
     transform: none;
   }
@@ -427,16 +427,79 @@ export function KreedaHeader({
   );
 }
 
-function ScrollingGameRow({ rowIndex, onGame }) {
+function ScrollingGameColumn({ columnIndex, onGame }) {
   const track = useRef(null);
+  const group = useRef(null);
   const timer = useRef(null);
   const deadline = useRef(0);
   const selecting = useRef(false);
+  const pointerTap = useRef(false);
   const pointerHeld = useRef(false);
-  const focused = useRef(false);
+  const keyboardFocus = useRef(false);
 
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [height, setHeight] = useState(null);
+
+  const games = GAME_LIST.map((game, index) => ({
+    game,
+    index,
+  })).filter((item) => item.index % 4 === columnIndex);
+
+  useEffect(() => {
+    const element = group.current;
+
+    if (!element) return undefined;
+
+    const measure = () => {
+      const next =
+        element.getBoundingClientRect().height - 8;
+
+      if (next > 0) setHeight(next);
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+
+      return () =>
+        window.removeEventListener("resize", measure);
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, []);
+
+  function resume() {
+    if (
+      pointerHeld.current ||
+      keyboardFocus.current
+    ) {
+      return;
+    }
+
+    const remaining = deadline.current - Date.now();
+
+    window.clearTimeout(timer.current);
+
+    if (remaining > 0) {
+      timer.current = window.setTimeout(
+        resume,
+        remaining,
+      );
+      return;
+    }
+
+    if (track.current) {
+      track.current.style.animationPlayState = "running";
+    }
+
+    setPaused(false);
+    selecting.current = false;
+  }
 
   function pause() {
     deadline.current = Date.now() + PAUSE_MS;
@@ -449,26 +512,11 @@ function ScrollingGameRow({ rowIndex, onGame }) {
     setSeconds(5);
 
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(resume, PAUSE_MS);
-  }
 
-  function resume() {
-    if (pointerHeld.current || focused.current) return;
-
-    const remaining = deadline.current - Date.now();
-
-    if (remaining > 0) {
-      window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(resume, remaining);
-      return;
-    }
-
-    if (track.current) {
-      track.current.style.animationPlayState = "running";
-    }
-
-    setPaused(false);
-    selecting.current = false;
+    timer.current = window.setTimeout(
+      resume,
+      PAUSE_MS,
+    );
   }
 
   useEffect(() => {
@@ -478,7 +526,9 @@ function ScrollingGameRow({ rowIndex, onGame }) {
       setSeconds(
         Math.max(
           0,
-          Math.ceil((deadline.current - Date.now()) / 1000),
+          Math.ceil(
+            (deadline.current - Date.now()) / 1000,
+          ),
         ),
       );
     }, 200);
@@ -490,19 +540,25 @@ function ScrollingGameRow({ rowIndex, onGame }) {
     return () => window.clearTimeout(timer.current);
   }, []);
 
-  const groupOrder = Array.from(
-    { length: 5 },
-    (_, offset) => (rowIndex + offset) % 5,
-  );
-
-  const groups = [...groupOrder, ...groupOrder];
-
   return (
     <section
-      className="kl-game-lane"
-      aria-label={`Games row ${rowIndex + 1}. Tap to pause, then choose a game.`}
-      onPointerDownCapture={() => {
-        selecting.current = deadline.current > Date.now();
+      className="kl-game-column"
+      aria-label={`Game line ${columnIndex + 1}. Tap to pause, then choose a game.`}
+      style={{
+        height:
+          height === null ? undefined : `${height}px`,
+        "--kl-column-duration":
+          `${[32, 40, 35, 44][columnIndex]}s`,
+        "--kl-column-delay":
+          `${[0, -6, -3, -9][columnIndex]}s`,
+      }}
+      onPointerDownCapture={(event) => {
+        event.preventDefault();
+
+        pointerTap.current = true;
+        selecting.current =
+          deadline.current > Date.now();
+
         pointerHeld.current = true;
         pause();
       }}
@@ -512,7 +568,11 @@ function ScrollingGameRow({ rowIndex, onGame }) {
       }}
       onPointerCancel={() => {
         pointerHeld.current = false;
+        pointerTap.current = false;
         pause();
+      }}
+      onKeyDownCapture={() => {
+        pointerTap.current = false;
       }}
       onPointerLeave={() => {
         if (pointerHeld.current) {
@@ -520,39 +580,74 @@ function ScrollingGameRow({ rowIndex, onGame }) {
           pause();
         }
       }}
-      onFocusCapture={() => {
-        focused.current = true;
+      onFocusCapture={(event) => {
+        if (!event.target.matches(":focus-visible")) {
+          return;
+        }
+
+        keyboardFocus.current = true;
         pause();
-      }}
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          focused.current = false;
-          resume();
+
+        if (track.current) {
+          track.current.style.animationName = "none";
+          track.current.style.transform =
+            "translateY(0)";
         }
       }}
+      onBlurCapture={(event) => {
+        if (
+          event.currentTarget.contains(
+            event.relatedTarget,
+          )
+        ) {
+          return;
+        }
+
+        if (
+          keyboardFocus.current &&
+          track.current
+        ) {
+          track.current.style.animationName = "";
+          track.current.style.transform = "";
+        }
+
+        keyboardFocus.current = false;
+        resume();
+      }}
     >
-      <div ref={track} className="kl-lane-track">
-        {groups.map((group, copyIndex) => (
+      <div ref={track} className="kl-column-track">
+        {[0, 1].map((copy) => (
           <div
-            key={copyIndex}
-            className="kl-lane-group"
-            aria-hidden={copyIndex !== 0 ? true : undefined}
+            key={copy}
+            ref={copy === 0 ? group : undefined}
+            className="kl-column-group"
+            aria-hidden={copy === 1 ? true : undefined}
           >
-            {GAME_LIST.slice(group * 4, group * 4 + 4).map(
-              ([id, name, href], column) => (
+            {games.map(
+              ({
+                game: [id, name, href],
+                index,
+              }) => (
                 <button
                   key={id}
                   type="button"
-                  className="kl-tile"
-                  tabIndex={copyIndex === 0 ? 0 : -1}
+                  className="kl-tile kl-column-card"
+                  tabIndex={copy === 0 ? 0 : -1}
                   aria-label={`Open ${name}`}
                   onClick={(event) => {
-                    const reducedMotion = window.matchMedia(
-                      "(prefers-reduced-motion: reduce)",
-                    ).matches;
+                    const keyboardActivation =
+                      event.detail === 0 &&
+                      !pointerTap.current;
+
+                    pointerTap.current = false;
+
+                    const reducedMotion =
+                      window.matchMedia?.(
+                        "(prefers-reduced-motion: reduce)",
+                      ).matches;
 
                     if (
-                      event.detail === 0 ||
+                      keyboardActivation ||
                       selecting.current ||
                       reducedMotion
                     ) {
@@ -560,13 +655,9 @@ function ScrollingGameRow({ rowIndex, onGame }) {
                     } else {
                       pause();
                     }
-
-                    if (event.detail !== 0) {
-                      event.currentTarget.blur();
-                    }
                   }}
                 >
-                  <Artwork index={group * 4 + column} />
+                  <Artwork index={index} />
                 </button>
               ),
             )}
@@ -576,9 +667,7 @@ function ScrollingGameRow({ rowIndex, onGame }) {
 
       {paused && (
         <span className="kl-pause-badge">
-          {seconds > 0
-            ? `${seconds}s · Select game`
-            : "Select game"}
+          {seconds > 0 ? `${seconds}s` : "Select"}
         </span>
       )}
     </section>
@@ -587,6 +676,7 @@ function ScrollingGameRow({ rowIndex, onGame }) {
 
 export default function KreedaLobby(props) {
   const { user, onGame, onSupport } = props;
+
   const [bonus, setBonus] = useState(null);
 
   const labels = [
@@ -623,18 +713,21 @@ export default function KreedaLobby(props) {
           className="kl-scrolling-games"
           aria-label="Choose your game"
         >
-          {Array.from({ length: 5 }, (_, rowIndex) => (
-            <ScrollingGameRow
-              key={rowIndex}
-              rowIndex={rowIndex}
-              onGame={onGame}
-            />
-          ))}
+          {Array.from(
+            { length: 4 },
+            (_, columnIndex) => (
+              <ScrollingGameColumn
+                key={columnIndex}
+                columnIndex={columnIndex}
+                onGame={onGame}
+              />
+            ),
+          )}
         </div>
 
         <p className="kl-scroll-help kl-motion-help">
-          వరుసను టచ్ చేయండి → 5 సెకండ్లు ఆగుతుంది →
-          గేమ్‌ను మళ్లీ టచ్ చేయండి.
+          ఒక లైన్‌ను టచ్ చేయండి → ఆ లైన్ 5 సెకండ్లు
+          ఆగుతుంది → గేమ్‌ను మళ్లీ టచ్ చేయండి.
         </p>
 
         <button
