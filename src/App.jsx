@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-
 import KreedaLobby, {
   KreedaHeader,
   KreedaLogin,
@@ -10,185 +9,113 @@ import AdminManagementShell from "./components/AdminManagementShell";
 import NewAdminPortal from "./components/NewAdminPortal";
 import ChangePasswordPage from "./components/ChangePasswordPage";
 import GameControlPage from "./components/GameControlPage";
-
 import RoulettePage from "./components/RoulettePage";
-import AviatorXXPage from "./components/AviatorXXPage";
+import TSBFlightPage from "./components/TSBFlightPage";
 import CardGamesPage from "./components/CardGamesPage";
 import ColorPredictionPage from "./components/ColorPredictionPage";
 import AnimatedSuperOverPage from "./components/AnimatedSuperOverPage";
-
 import DealOrNoDealPage from "./components/DealOrNoDealPage";
 import DealOrNoDealControlPage from "./components/DealOrNoDealControlPage";
-
 import InstantGamesPage from "./components/InstantGamesPage";
 import DiceGamesPage from "./components/DiceGamesPage";
 import SicBoPage from "./components/SicBoPage";
 import ChickenRoadPage from "./components/ChickenRoadPage";
 import TwistXPage from "./components/TwistXPage";
-
 import DreamWheelPage from "./components/DreamWheelPage";
 import DreamWheelControlPage from "./components/DreamWheelControlPage";
-
 import DepositPage from "./components/DepositPage";
 import WithdrawalPage from "./components/WithdrawalPage";
 import BetHistoryPage from "./components/BetHistoryPage";
 import AccountStatementPage from "./components/AccountStatementPage";
-
 import "./kreeda.css";
 
 const AUTH_KEY = "telugu_sports_auth_user";
+const ACCOUNT_VIEWS = ["deposit", "withdrawal", "history", "statement"];
 
 function BoardPage({ game }) {
   return (
     <iframe
       className="kl-board-frame"
-      title={game + " game"}
-      src={
-        "/kreeda-board/index.html?game=" +
-        encodeURIComponent(game)
-      }
+      title={`${game} game`}
+      src={`/kreeda-board/index.html?game=${encodeURIComponent(game)}`}
     />
   );
 }
 
 const CUSTOMER_GAMES = {
   "/games/asta-chamma": {
-    title: "ASTA CHAMMA",
     Page: BoardPage,
     game: "asta-chamma",
   },
-
   "/games/dadi": {
-    title: "DADI",
     Page: BoardPage,
     game: "dadi",
   },
-
   "/games/chess": {
-    title: "CHESS",
     Page: BoardPage,
     game: "chess",
   },
-
   "/games/ww-animation": {
-    title: "WW ANIMATION",
     Page: BoardPage,
     game: "ww",
   },
-
   "/games/tsb-flight": {
-    title: "AVIATOR XX",
-    Page: AviatorXXPage,
+    Page: TSBFlightPage,
   },
-
-  "/games/aviator-xx": {
-    title: "AVIATOR XX",
-    Page: AviatorXXPage,
-  },
-
   "/games/roulette": {
-    title: "ROULETTE",
     Page: RoulettePage,
   },
-
   "/games/super-over": {
-    title: "INSTANT SUPER OVER",
     Page: AnimatedSuperOverPage,
   },
-
+  "/games/animated-super-over": {
+    Page: AnimatedSuperOverPage,
+  },
   "/games/color-prediction": {
-    title: "COLOR PREDICTION",
     Page: ColorPredictionPage,
   },
-
   "/games/dragon-tiger": {
-    title: "DRAGON TIGER",
     Page: CardGamesPage,
     game: "dragon-tiger",
   },
-
   "/games/andar-bahar": {
-    title: "ANDAR BAHAR",
     Page: CardGamesPage,
     game: "andar-bahar",
   },
-
   "/games/lucky-seven": {
-    title: "LUCKY SEVEN",
     Page: CardGamesPage,
     game: "lucky-seven",
   },
-
   "/games/deal-or-no-deal": {
-    title: "DEAL OR NO DEAL",
     Page: DealOrNoDealPage,
-    description:
-      "Random demo results are locked before betting opens.",
   },
-
   "/games/mini-roulette": {
-    title: "MINI ROULETTE",
     Page: InstantGamesPage,
     game: "mini-roulette",
-    description:
-      "Single-player random demo. Demo coins only.",
   },
-
   "/games/keno-80": {
-    title: "KENO 80",
     Page: InstantGamesPage,
     game: "keno-80",
-    description:
-      "Pick up to 10 numbers. Twenty numbers are drawn randomly. Demo coins only.",
   },
-
   "/games/lankesh": {
-    title: "LANKESH",
     Page: DiceGamesPage,
     game: "lankesh",
-    description:
-      "Shared random demo rounds. Choose F1-F10. Demo coins only.",
   },
-
   "/games/jhandi-munda": {
-    title: "JHANDI MUNDA",
     Page: DiceGamesPage,
     game: "jhandi-munda",
-    description:
-      "Six dice, six symbols and shared random demo rounds. Demo coins only.",
   },
-
   "/games/twist-x": {
-    title: "TWIST X",
     Page: TwistXPage,
-    description:
-      "Random single-player demo with three progress rings. Each spin uses demo coins.",
   },
-
   "/games/extra-sic-bo": {
-    title: "EXTRA SIC BO",
     Page: SicBoPage,
-    description:
-      "Three dice, shared random rounds and demo ExtraPay. Demo coins only.",
   },
-
   "/games/dream-wheel": {
-    title: "DREAM WHEEL",
     Page: DreamWheelPage,
-    description:
-      "Controller-planned demo. The full spin plan is locked before betting opens. The robot is animated.",
   },
-
   "/games/chicken-road-cross": {
-    title: "CHICKEN ROAD CROSS",
     Page: ChickenRoadPage,
-    description:
-      "Manual jumps with server-generated random outcomes. Waiting does not change the odds. Demo coins only.",
-  },
-
-  "/games/animated-super-over": {
-    title: "INSTANT SUPER OVER",
-    Page: AnimatedSuperOverPage,
   },
 };
 
@@ -198,69 +125,51 @@ export default function App() {
   const [login, setLogin] = useState(false);
   const [pendingPath, setPendingPath] = useState(null);
   const [menu, setMenu] = useState(false);
+  const [number, setNumber] = useState("");
+  const [notice, setNotice] = useState("");
+  const [admin, setAdmin] = useState(null);
+  const [adminChecking, setAdminChecking] = useState(true);
+  const [balance, setBalance] = useState(null);
+  const [balanceError, setBalanceError] = useState(false);
+  const [balanceRefresh, setBalanceRefresh] = useState(0);
 
   const [view, setView] = useState(() => {
     const next = sessionStorage.getItem("kl-menu-next");
-
     sessionStorage.removeItem("kl-menu-next");
-
-    return [
-      "deposit",
-      "withdrawal",
-      "history",
-      "statement",
-    ].includes(next)
-      ? next
-      : "home";
+    return ACCOUNT_VIEWS.includes(next) ? next : "home";
   });
 
-  const [number, setNumber] = useState("");
-  const [notice, setNotice] = useState("");
-
-  const [admin, setAdmin] = useState(null);
-  const [adminChecking, setAdminChecking] = useState(true);
-
-  const path =
-    location.pathname.replace(/\/+$/, "") || "/";
-
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
   const selected = CUSTOMER_GAMES[path];
+  const customerId = user?.id;
 
   useEffect(() => {
     let active = true;
-
+    const controller = new AbortController();
     const adminRoute = path === "/admin";
 
-    const url = adminRoute
-      ? "/api/auth/admin-session"
-      : "/api/kl/session";
-
-    fetch(url, {
-      credentials: "same-origin",
-      cache: "no-store",
-    })
+    fetch(
+      adminRoute ? "/api/auth/admin-session" : "/api/kl/session",
+      {
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: controller.signal,
+      },
+    )
       .then(async (response) => {
         const data = await response.json();
-
         if (!active) return;
 
         if (adminRoute) {
           setAdmin(
-            response.ok && !data.admin?.historyOnly
-              ? data.admin
-              : null
+            response.ok && !data.admin?.historyOnly ? data.admin : null,
           );
         } else {
-          const customer = response.ok
-            ? data.customer
-            : null;
-
+          const customer = response.ok ? data.customer : null;
           setUser(customer);
 
           if (customer) {
-            sessionStorage.setItem(
-              AUTH_KEY,
-              JSON.stringify(customer)
-            );
+            sessionStorage.setItem(AUTH_KEY, JSON.stringify(customer));
           }
         }
       })
@@ -274,41 +183,110 @@ export default function App() {
 
     fetch("/api/public/settings", {
       cache: "no-store",
+      signal: controller.signal,
     })
       .then((response) => response.json())
       .then((data) => {
         if (active) {
-          setNumber(
-            String(data.whatsappNumber || "")
-              .replace(/\D/g, "")
-          );
+          setNumber(String(data.whatsappNumber || "").replace(/\D/g, ""));
         }
       })
       .catch(() => {});
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [path]);
+
+  useEffect(() => {
+    setBalance(null);
+    setBalanceError(false);
+  }, [customerId]);
+
+  useEffect(() => {
+    if (!customerId) return;
+
+    let active = true;
+    let busy = false;
+    const controller = new AbortController();
+
+    async function refreshBalance() {
+      if (!active || busy || document.visibilityState === "hidden") {
+        return;
+      }
+
+      busy = true;
+
+      try {
+        const response = await fetch(
+          `/api/customers/${encodeURIComponent(customerId)}/demo-balance`,
+          {
+            credentials: "same-origin",
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        const data = await response.json();
+
+        if (
+          !response.ok ||
+          data.balance === null ||
+          data.balance === undefined ||
+          !Number.isFinite(Number(data.balance))
+        ) {
+          throw new Error("Balance unavailable.");
+        }
+
+        if (active) {
+          setBalance(Number(data.balance));
+          setBalanceError(false);
+        }
+      } catch {
+        if (active) setBalanceError(true);
+      } finally {
+        busy = false;
+      }
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshBalance();
+    };
+
+    refreshBalance();
+
+    const timer = window.setInterval(refreshBalance, 15000);
+    window.addEventListener("focus", refreshBalance);
+    window.addEventListener("demo-balance-updated", refreshBalance);
+    window.addEventListener("demo-bets-updated", refreshBalance);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshBalance);
+      window.removeEventListener("demo-balance-updated", refreshBalance);
+      window.removeEventListener("demo-bets-updated", refreshBalance);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [customerId, view, balanceRefresh]);
 
   function support() {
     if (!/^[1-9][0-9]{9,14}$/.test(number)) {
       setNotice(
-        "Support number is unavailable. Please try again after it is configured in Admin Payment Settings."
+        "Support number is unavailable. Please try again after it is configured in Admin Payment Settings.",
       );
-
       return;
     }
 
     window.open(
-      "https://wa.me/" +
-        number +
-        "?text=" +
-        encodeURIComponent(
-          "Hello, I would like help with my Kreeda Lokam account."
-        ),
+      `https://wa.me/${number}?text=${encodeURIComponent(
+        "Hello, I would like help with my Kreeda Lokam account.",
+      )}`,
       "_blank",
-      "noopener,noreferrer"
+      "noopener,noreferrer",
     );
   }
 
@@ -320,17 +298,10 @@ export default function App() {
     };
 
     setUser(next);
-
-    sessionStorage.setItem(
-      AUTH_KEY,
-      JSON.stringify(next)
-    );
+    sessionStorage.setItem(AUTH_KEY, JSON.stringify(next));
 
     if (remember) {
-      localStorage.setItem(
-        AUTH_KEY,
-        JSON.stringify(next)
-      );
+      localStorage.setItem(AUTH_KEY, JSON.stringify(next));
     } else {
       localStorage.removeItem(AUTH_KEY);
     }
@@ -342,42 +313,36 @@ export default function App() {
       !customer.mustChangePassword &&
       !customer.mustChangeWithdrawalPassword
     ) {
-      location.assign(pendingPath);
+      window.location.assign(pendingPath);
     }
   }
 
   async function logout() {
     try {
-      const response = await fetch(
-        "/api/kl/logout",
-        {
-          method: "POST",
-          credentials: "same-origin",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: "{}",
-        }
-      );
+      const response = await fetch("/api/kl/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
 
-      if (!response.ok) {
-        throw new Error();
-      }
+      if (!response.ok) throw new Error("Logout failed.");
 
       localStorage.removeItem(AUTH_KEY);
       sessionStorage.removeItem(AUTH_KEY);
+      sessionStorage.removeItem("kl-menu-next");
 
       setUser(null);
+      setBalance(null);
       setMenu(false);
       setView("home");
+      setPendingPath(null);
+      setLogin(false);
 
-      if (path !== "/") {
-        location.assign("/");
-      }
+      if (path !== "/") window.location.assign("/");
     } catch {
-      setNotice(
-        "Logout could not be confirmed. Please reconnect and retry."
-      );
+      setMenu(false);
+      setNotice("Logout could not be confirmed. Please reconnect and retry.");
     }
   }
 
@@ -387,99 +352,95 @@ export default function App() {
       credentials: "same-origin",
     }).catch(() => {});
 
-    localStorage.removeItem(
-      "telugu_sports_demo_admin"
-    );
-
+    localStorage.removeItem("telugu_sports_demo_admin");
     setAdmin(null);
   }
 
   function openGame(href) {
     if (user) {
-      location.assign(href);
+      window.location.assign(href);
     } else {
       setPendingPath(href);
       setLogin(true);
     }
   }
 
-  const home = () => location.assign("/");
+  function home() {
+    window.location.assign("/");
+  }
 
-  function openAccountView(nextView) {
+  function openView(next) {
+    if (next !== "home" && !ACCOUNT_VIEWS.includes(next)) return;
+
     setMenu(false);
 
-    if (selected) {
-      sessionStorage.setItem(
-        "kl-menu-next",
-        nextView
-      );
+    if (!user) {
+      setLogin(true);
+      return;
+    }
 
+    if (selected) {
+      sessionStorage.setItem("kl-menu-next", next);
       home();
     } else {
-      setView(nextView);
+      setView(next);
+      setBalanceRefresh((value) => value + 1);
+      window.scrollTo({ top: 0, behavior: "auto" });
     }
   }
 
+  function showInformation(message) {
+    setMenu(false);
+    setNotice(message);
+  }
+
+  const headerProps = {
+    user,
+    balance,
+    balanceError,
+    onLogin: () => setLogin(true),
+    onSignup: support,
+    onMenu: () => setMenu(true),
+    onHome: home,
+    onDeposit: () => openView("deposit"),
+    onWithdrawal: () => openView("withdrawal"),
+    onRefreshBalance: () => setBalanceRefresh((value) => value + 1),
+  };
+
   if (path === "/admin") {
-    return adminChecking ? (
-      <div className="kl-loading">
-        Checking Admin session…
-      </div>
-    ) : admin?.isAuthenticated ? (
-      <AdminManagementShell
-        admin={admin}
-        onLogout={adminLogout}
-      />
+    if (adminChecking) {
+      return <div className="kl-loading">Checking Admin session…</div>;
+    }
+
+    return admin?.isAuthenticated ? (
+      <AdminManagementShell admin={admin} onLogout={adminLogout} />
     ) : (
-      <AdminLoginPage
-        onLogin={setAdmin}
-        onBack={home}
-      />
+      <AdminLoginPage onLogin={setAdmin} onBack={home} />
     );
   }
 
-  if (path === "/new-admin") {
-    return <NewAdminPortal />;
-  }
-
-  if (path === "/game-control") {
-    return <GameControlPage />;
-  }
-
-  if (path === "/game-control/roulette") {
-    return <RoulettePage controller />;
-  }
+  if (path === "/new-admin") return <NewAdminPortal />;
+  if (path === "/game-control") return <GameControlPage />;
+  if (path === "/game-control/roulette") return <RoulettePage controller />;
 
   if (path === "/game-control/deal-or-no-deal") {
     return <DealOrNoDealControlPage />;
   }
 
   if (path === "/game-control/dream-wheel") {
-    return (
-      <DreamWheelControlPage onBack={home} />
-    );
+    return <DreamWheelControlPage onBack={home} />;
   }
 
   if (checking) {
     return (
       <div className="kl-loading">
-        <img
-          src="/kreeda/kreeda-lokam-logo.png"
-          alt="Kreeda Lokam"
-        />
-
+        <img src="/kreeda/kreeda-lokam-logo.png" alt="Kreeda Lokam" />
         <span>Loading your arena…</span>
       </div>
     );
   }
 
-  if (
-    user &&
-    (
-      user.mustChangePassword ||
-      user.mustChangeWithdrawalPassword
-    )
-  ) {
+  if (user && (user.mustChangePassword || user.mustChangeWithdrawalPassword)) {
     return (
       <div className="kl-game-frame">
         <ChangePasswordPage
@@ -492,9 +453,7 @@ export default function App() {
               mustChangeWithdrawalPassword: false,
             });
 
-            if (pendingPath) {
-              location.assign(pendingPath);
-            }
+            if (pendingPath) window.location.assign(pendingPath);
           }}
           onLogout={logout}
         />
@@ -510,10 +469,7 @@ export default function App() {
         onClose={() => {
           setLogin(false);
           setPendingPath(null);
-
-          if (path !== "/") {
-            home();
-          }
+          if (path !== "/") home();
         }}
         onSignup={support}
         onSupport={support}
@@ -533,12 +489,10 @@ export default function App() {
           user={user}
           onBack={home}
           onLogout={logout}
-          onDeposit={() => openAccountView("deposit")}
-          onWithdrawal={() => openAccountView("withdrawal")}
         />
       </div>
     );
-  } else if (user && view !== "home") {
+  } else if (user && ACCOUNT_VIEWS.includes(view)) {
     const Page = {
       deposit: DepositPage,
       withdrawal: WithdrawalPage,
@@ -550,7 +504,7 @@ export default function App() {
       <div className="kl-game-frame">
         <Page
           user={user}
-          onBack={() => setView("home")}
+          onBack={() => openView("home")}
           onLogout={logout}
         />
       </div>
@@ -558,12 +512,8 @@ export default function App() {
   } else {
     content = (
       <KreedaLobby
-        user={user}
-        onLogin={() => setLogin(true)}
-        onSignup={support}
+        {...headerProps}
         onGame={openGame}
-        onMenu={() => setMenu(true)}
-        onHome={home}
         onSupport={support}
       />
     );
@@ -571,14 +521,8 @@ export default function App() {
 
   return (
     <>
-      {selected || view !== "home" ? (
-        <KreedaHeader
-          user={user}
-          onLogin={() => setLogin(true)}
-          onSignup={support}
-          onMenu={() => setMenu(true)}
-          onHome={home}
-        />
+      {selected || (user && view !== "home") ? (
+        <KreedaHeader {...headerProps} />
       ) : null}
 
       {content}
@@ -592,6 +536,7 @@ export default function App() {
             aria-label="Account menu"
           >
             <button
+              type="button"
               className="kl-close"
               onClick={() => setMenu(false)}
               aria-label="Close menu"
@@ -599,67 +544,69 @@ export default function App() {
               ×
             </button>
 
-            <h2>
-              {user?.name || user?.loginId}
-            </h2>
-
-            <p>
-              Simulation balance · ₹
-              {Number(
-                user?.demoCoinBalance || 0
-              ).toLocaleString("en-IN")}
-            </p>
-
-            {[
-              ["home", "Games"],
-              ["deposit", "Deposit requests"],
-              ["withdrawal", "Withdrawal requests"],
-              ["history", "Playing history"],
-              ["statement", "Account statement"],
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                className="kl-button kl-outline"
-                onClick={() => {
-                  setMenu(false);
-
-                  if (selected) {
-                    sessionStorage.setItem(
-                      "kl-menu-next",
-                      id
-                    );
-
-                    home();
-                  } else {
-                    setView(id);
-                  }
-                }}
-              >
-                {label}
-              </button>
-            ))}
+            <h2>{user?.name || user?.loginId || "My Account"}</h2>
 
             <button
+              type="button"
               className="kl-button kl-outline"
+              onClick={() => openView("home")}
+            >
+              Games
+            </button>
+
+            <button
+              type="button"
+              className="kl-button kl-outline"
+              onClick={() =>
+                showInformation(
+                  "Each game has its own rules and limits. Read the rules shown inside that game before placing a selection. For account assistance, contact Customer Support.",
+                )
+              }
+            >
+              Rules
+            </button>
+
+            <button
+              type="button"
+              className="kl-button kl-outline"
+              onClick={() =>
+                showInformation(
+                  "Welcome Bonus 10%, Promo Code Bonus 10%, Losing Bonus 10%. Eligibility is reviewed by the administrator. Contact support for details. Bonuses are not credited automatically.",
+                )
+              }
+            >
+              Bonus / Promo Code
+            </button>
+
+            <button
+              type="button"
+              className="kl-button kl-outline"
+              onClick={() => openView("history")}
+            >
+              Playing History
+            </button>
+
+            <button
+              type="button"
+              className="kl-button kl-outline"
+              onClick={() => openView("statement")}
+            >
+              Account Statement
+            </button>
+
+            <button
+              type="button"
+              className="kl-button kl-gold"
               onClick={() => {
                 setMenu(false);
-
-                setNotice(
-                  "Welcome Bonus 10%, Promo Code Bonus 10%, Losing Bonus 10%. Eligibility is reviewed by the administrator; contact support for details."
-                );
+                support();
               }}
             >
-              Bonus / Promo information
+              Customer Support
             </button>
 
             <button
-              className="kl-button kl-gold"
-              onClick={support}
-            >
-              Customer support
-            </button>
-
-            <button
+              type="button"
               className="kl-button kl-outline"
               onClick={logout}
             >
@@ -678,8 +625,8 @@ export default function App() {
             aria-label="Notice"
           >
             <p>{notice}</p>
-
             <button
+              type="button"
               className="kl-button kl-gold"
               onClick={() => setNotice("")}
             >
